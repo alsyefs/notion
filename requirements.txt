@@ -1,0 +1,14 @@
+# Create: python -m venv notion
+# Activate in Windows: .\notion\Scripts\activate
+# Activate in Linux: source notion/bin/activate
+# To install: pip install -r requirements.txt
+requests
+python-dotenv
+pandas
+matplotlib
+tqdm
+seaborn
+networkx
+aiohttp
+fpdf
+openpyxl

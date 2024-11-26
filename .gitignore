@@ -1,0 +1,13 @@
+# Ignore keys file
+secret.py
+
+# Ignore data folder
+data/
+# Ignore analysis output
+data/analysis/
+# Ignore Python bytecode files
+*.pyc
+__pycache__/
+# Ignore log files
+*.log
+logs/
