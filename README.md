@@ -61,21 +61,13 @@ PAGES_JSON_FILE_NAME = "notion_pages.json"
 ## Installation
 Add the necessary Python libraries by running the following command (It is recommended to create a Python virtual environment):
 ### (Optional) Create a virtual environment:
-    ```python
     python -m venv notion
-    ```
 ### (Optional) Activate it in Windows:
-    ```python
     .\notion\Scripts\activate
-    ```
 ### (Optional) Activate it in Linux:
-    ```python
     source notion/bin/activate
-    ```
 ### (Required) Install the requirements:
-    ```python
     pip install -r requirements.txt
-    ```
 
 ## Running
 After adding your configuration values and installing the requirements, simply run as:
