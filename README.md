@@ -1,4 +1,44 @@
 # Notion Database Integration and Automation
+The main goal of this project is to analyze your work on Notion to provide useful insights for better productivity. It fetches data from your Notion database, including pages and content, and generates reports with charts to help you visualize your tasks.
+
+At the first run, it might take a while to fetch all the data depending on the amount of pages you have, but later runs will only fetch the newly updated pages. This code is currently designed to **not** affect your existing Notion database by avoiding operations like 'insert' or 'update'. Future updates to this repository might include those operations, but they will be clearly documented.
+
+
+**Disclaimer:** Use this code at your own risk. The author is not responsible for any unintended consequences resulting from its use.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Configuration Setup](#configuration-setup)
+- [Installation](#installation)
+- [Running](#running)
+- [Usage](#usage)
+- [Notion Database Assumptions](#notion-database-assumptions)
+- [Notes](#notes)
+- [Contributing](#contributing)
+- [License](#license)
+
+
+---
+
+## Features
+
+- Fetch Notion database and pages
+- Download attached files
+- Export data to CSV and JSON
+- Analyze tasks and generate reports with charts
+- Designed to avoid altering your Notion database (read-only operations)
+
+---
+
+## Requirements
+- Python 3.6 or higher
+- Notion API token with read permissions
+
+---
 
 ## Configuration Setup
 
@@ -16,30 +56,46 @@ PAGES_CSV_FILE_NAME = "notion_pages.csv"
 PAGES_JSON_FILE_NAME = "notion_pages.json"
 ```
 
-## Add the necessary Python libraries by running the following command (it is always best to create a Python virtual environment):
-(Optional) Create a virtual environment:
+---
+
+## Installation
+Add the necessary Python libraries by running the following command (It is recommended to create a Python virtual environment):
+### (Optional) Create a virtual environment:
     ```python
     python -m venv notion
     ```
-(Optional) Activate it in Windows:
+### (Optional) Activate it in Windows:
     ```python
     .\notion\Scripts\activate
     ```
-(Optional) Activate it in Linux:
+### (Optional) Activate it in Linux:
     ```python
     source notion/bin/activate
     ```
-(Required) Install the requirements:
+### (Required) Install the requirements:
     ```python
     pip install -r requirements.txt
     ```
 
-## After adding your configuration values and installing the requirements, run as:
+## Running
+After adding your configuration values and installing the requirements, simply run as:
 ```python
 python app.py
 ```
 
-## The assumption of a Notion database is to have the following columns:
+---
+
+## Usage
+After running the script, you will receive reports like the following:
+![Sample Report](sample_task_completion_times.png)
+![Sample Report](sample_tasks_by_priority.png)
+![Sample Report](sample_analysis_output.txt)
+
+---
+
+
+## Notion Database Assumptions
+The assumption of a Notion database is to have the following columns:
 1. ID: Named UID in the code
 2. NID: As type 'ID' with the prefix 'PDM' which shows the numeric ID e.g. '454'.
 3. Name: As type 'title'.
@@ -56,7 +112,21 @@ python app.py
 
 Body Content: This is not part of the database, but it represents the content of a page in the database.
 
+---
+
 ## Notes
-1. Ensure the NOTION_API_TOKEN has appropriate permissions for accessing the database.
-2. Verify that your Notion database matches the column structure outlined above.
-3. Use the generated CSV and JSON files for further processing or reporting.
+- **Permissions:** Ensure the `NOTION_API_TOKEN` has appropriate permissions for accessing the database.
+- **Database Structure:** Verify that your Notion database matches the column structure outlined above, or edit the code to math your structure.
+- **Data Usage:** Use the generated CSV and JSON files for further processing or reporting.
+- **Troubleshooting:** If you encounter issues with data fetching, check your internet connection and API token validity.
+
+---
+
+## Contributing
+Contributions are welcome! Please open an issue or submit a pull request.
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
