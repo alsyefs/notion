@@ -59,8 +59,4 @@ Body Content: This is not part of the database, but it represents the content of
 ## Notes
 1. Ensure the NOTION_API_TOKEN has appropriate permissions for accessing the database.
 2. Verify that your Notion database matches the column structure outlined above.
-<<<<<<< HEAD
 3. Use the generated CSV and JSON files for further processing or reporting.
-=======
-3. Use the generated CSV and JSON files for further processing or reporting.
->>>>>>> fb11bf3 (Initial code commit)
