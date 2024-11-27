@@ -1,4 +1,7 @@
 # Notion Database Integration and Automation
+![MIT License](https://img.shields.io/badge/license-MIT-blue)
+![Python 3.6+](https://img.shields.io/badge/python-3.6%2B-brightgreen)
+
 The main goal of this project is to analyze your work on Notion to provide useful insights for better productivity. It fetches data from your Notion database, including pages and content, and generates reports with charts to help you visualize your tasks.
 
 At the first run, it might take a while to fetch all the data depending on the amount of pages you have, but later runs will only fetch the newly updated pages. This code is currently designed to **not** affect your existing Notion database by avoiding operations like 'insert' or 'update'. Future updates to this repository might include those operations, but they will be clearly documented.
