@@ -36,7 +36,7 @@ At the first run, it might take a while to fetch all the data depending on the a
 
 ## Requirements
 - Python 3.6 or higher
-- Notion API token with read permissions
+- Notion API token with read permissions and a Notion database ID
 
 ---
 
