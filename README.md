@@ -88,7 +88,9 @@ First, change the path in either [`sample_run_script_windows.bat`](extras/sample
 After running the script, you will receive reports like the following:
 ![Sample Report](extras/sample_task_completion_times.png)
 ![Sample Report](extras/sample_tasks_by_priority.png)
-[Sample Text Report](extras/sample_analysis_output.txt)
+
+And here is a sample report file generated after fetching Notion Pages: 
+[`sample_analysis_output.txt`](extras/sample_analysis_output.txt)
 
 ---
 
