@@ -85,7 +85,7 @@ You can use a script to automate the whole process of running.
 First, change the path in either [`sample_run_script_windows.bat`](extras/sample_run_script_windows.bat) (for Windows) or [`sample_run_script_linux.sh`](extras/sample_run_script_linux.sh) (for Linux) depending on system. Then, double-click on the script file and wait for the fetching process to complete.
 
 
-After running the script, you will receive reports like the following:
+After running the script, you will receive reports like the following (only 2 charts are shown here, but you will get more):
 ![Sample Report](extras/sample_task_completion_times.png)
 ![Sample Report](extras/sample_tasks_by_priority.png)
 
