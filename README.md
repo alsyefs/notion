@@ -82,9 +82,8 @@ python app.py
 
 ## Usage
 You can use a script to automate the whole process of running.
-First, change the path in either [`.bat`](extras/sample_run_script_windows.bat) (for Windows) or [`.sh`](extras/sample_run_script_linux.sh) (for Linux) depending on system. Then, double-click on the script file and wait for the fetching process to complete.
-<!-- [Sample Batch Script](extras/sample_run_script_windows.bat) -->
-<!-- [Sample Shell Script](extras/sample_run_script_linux.sh) -->
+First, change the path in either [`sample_run_script_windows.bat`](extras/sample_run_script_windows.bat) (for Windows) or [`sample_run_script_linux.sh`](extras/sample_run_script_linux.sh) (for Linux) depending on system. Then, double-click on the script file and wait for the fetching process to complete.
+
 
 After running the script, you will receive reports like the following:
 ![Sample Report](extras/sample_task_completion_times.png)
