@@ -1,6 +1,8 @@
 # Ignore keys file
 secret.py
 
+run_script_linux.sh
+run_script_windows.bat
 # Ignore data folder
 data/
 # Ignore analysis output
