@@ -5,5 +5,7 @@ import asyncio
 FETCH_ITEM_LIMIT = 0  # Set to 0 to fetch all items (items are Notion pages)
 
 if __name__ == "__main__":
+    print("Starting...")
     asyncio.run(fetch_pages(limit=FETCH_ITEM_LIMIT))
     analyze_tasks()
+    print("Done!")

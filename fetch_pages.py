@@ -346,7 +346,11 @@ async def fetch_pages(limit=10):
     os.makedirs(os.path.dirname(DATA_DIR), exist_ok=True)
     tasks = await fetch_and_process_pages(limit)
     save_tasks_to_csv(tasks, cache_file=PAGES_CSV_FILE_PATH)
-    print("Updated CSV with new tasks.")
+    # If the CSV file is updated, show a message. If not, show no changes were made.
+    if len(tasks) > 0:
+        print(f"New tasks fetched: {len(tasks)}")
+    else:
+        print("No new tasks fetched.")
     tasks_df = pd.read_csv(PAGES_CSV_FILE_PATH)
     tasks_df.to_json(PAGES_JSON_FILE_PATH, orient="records", indent=4)
 
