@@ -212,20 +212,39 @@ async def extract_page_blocks(blocks):
             texts.extend(child_texts)
     return texts
 
+# def safe_get(dct, *keys):
+#     for key in keys:
+#         if isinstance(dct, dict):
+#             dct = dct.get(key)
+#         elif isinstance(dct, list) and isinstance(key, int) and len(dct) > key:
+#             dct = dct[key]
+#         else:
+#             return None
+#     return dct
+
 def safe_get(dct, *keys):
+    """Enhanced safe dictionary access that better handles Notion title fields."""
+    current = dct
     for key in keys:
-        if isinstance(dct, dict):
-            dct = dct.get(key)
-        elif isinstance(dct, list) and isinstance(key, int) and len(dct) > key:
-            dct = dct[key]
+        if isinstance(current, dict):
+            current = current.get(key)
+        elif isinstance(current, list) and isinstance(key, int) and len(current) > key:
+            current = current[key]
         else:
             return None
-    return dct
+        if current is None:
+            return None
+    return current
 
 async def process_page(result, session):
     """Process an individual Notion task and return its data as a dictionary."""
     properties = result.get("properties", {})
     page_id = result.get("id", "")
+    title_prop = properties.get("Name", {})
+    title = ""
+    if title_prop and "title" in title_prop:
+        title_items = title_prop["title"]
+        title = "".join(item.get("plain_text", "") for item in title_items)
     page_blocks = await fetch_page_blocks(page_id, session)
     page_content_texts = await extract_page_blocks(page_blocks)
     page_content_str = "\n".join(page_content_texts)
@@ -263,7 +282,8 @@ async def process_page(result, session):
     return {
         "UID": page_id,
         "NID": NID,
-        "Name": safe_get(properties, "Name", "title", 0, "plain_text") or "Untitled",
+        # "Name": safe_get(properties, "Name", "title", 0, "plain_text") or "Untitled",
+        "Name": title or "Untitled",
         "Body Content": page_content_str,
         "Status": safe_get(properties, "Status", "select", "name"),
         "Started": safe_get(properties, "Started", "date", "start"),
@@ -334,13 +354,16 @@ async def fetch_and_process_pages(limit=None):
 
 def save_tasks_to_csv(new_tasks, cache_file=PAGES_CSV_FILE_PATH):
     """Save new or updated tasks to the CSV file."""
+    if not new_tasks:  # If no new tasks, return early
+        return
+    new_tasks_df = pd.DataFrame(new_tasks)
     if os.path.exists(cache_file):
-        existing_df = pd.read_csv(cache_file)  # Read the existing file
-        new_tasks_df = pd.DataFrame(new_tasks)
-        merged_df = pd.concat([existing_df, new_tasks_df]).drop_duplicates(subset="UID", keep="last")  # Merge existing and new tasks, avoiding duplicates
-        merged_df.to_csv(cache_file, index=False)  # Save the merged DataFrame
-    else:  # If no existing file, save the new tasks directly
-        pd.DataFrame(new_tasks).to_csv(cache_file, index=False)
+        existing_df = pd.read_csv(cache_file)
+        if not new_tasks_df.empty:
+            merged_df = pd.concat([existing_df, new_tasks_df]).drop_duplicates(subset="UID", keep="last")
+            merged_df.to_csv(cache_file, index=False)
+    else:
+        new_tasks_df.to_csv(cache_file, index=False)
 
 async def fetch_pages(limit=10):
     os.makedirs(os.path.dirname(DATA_DIR), exist_ok=True)
