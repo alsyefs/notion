@@ -4,12 +4,49 @@
 PROJECT_DIR="/home/user/path/to/project"
 VENV_DIR="$PROJECT_DIR/notion"
 
-# Exit on any error
-set -e
-
 # Function to log messages
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
+
+# Function to create virtual environment
+create_venv() {
+    log "Creating fresh virtual environment..."
+    if ! python -m venv notion --clear; then
+        log "Failed to create virtual environment"
+        return 1
+    fi
+    return 0
+}
+
+# Function to setup basic packages
+setup_basic_packages() {
+    log "Installing basic packages..."
+    python -m ensurepip --upgrade
+    if ! python -m pip install --upgrade pip setuptools wheel; then
+        return 1
+    fi
+
+    # Verify pip installation
+    if ! command -v pip &> /dev/null; then
+        log "Error: pip installation failed"
+        return 1
+    fi
+    return 0
+}
+
+# Function to install requirements
+install_requirements() {
+    if [ -f "requirements.txt" ]; then
+        log "Installing requirements from requirements.txt..."
+        if ! pip install -r requirements.txt; then
+            return 1
+        fi
+        return 0
+    else
+        log "Warning: requirements.txt not found!"
+        return 1
+    fi
 }
 
 # Change to project directory or exit if it doesn't exist
@@ -18,45 +55,39 @@ cd "$PROJECT_DIR" || {
     exit 1
 }
 
-# Always remove existing virtual environment to ensure clean state
-if [ -d "$VENV_DIR" ]; then
-    log "Removing existing virtual environment..."
-    rm -rf "$VENV_DIR"
-fi
+# Try to use existing virtual environment first
+if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then
+    log "Found existing virtual environment, attempting to use it..."
+    source "$VENV_DIR/bin/activate"
 
-# Create new virtual environment with system packages
-log "Creating fresh virtual environment..."
-python -m venv notion --clear
-if [ $? -ne 0 ]; then
-    log "Failed to create virtual environment"
-    exit 1
-fi
-
-# Activate the virtual environment
-log "Activating virtual environment..."
-source notion/bin/activate
-
-# Ensure basic packages are properly installed
-log "Installing basic packages..."
-python -m ensurepip --upgrade
-python -m pip install --upgrade pip setuptools wheel
-
-# Verify pip installation
-if ! command -v pip &> /dev/null; then
-    log "Error: pip installation failed"
-    exit 1
-fi
-
-# Install requirements if requirements.txt exists
-if [ -f "requirements.txt" ]; then
-    log "Installing requirements from requirements.txt..."
-    pip install -r requirements.txt || {
-        log "Failed to install requirements"
-        exit 1
-    }
+    # Try to use existing environment
+    if setup_basic_packages && install_requirements; then
+        log "Successfully using existing virtual environment"
+    else
+        log "Issues with existing virtual environment, recreating..."
+        deactivate 2>/dev/null || true
+        rm -rf "$VENV_DIR"
+        if create_venv && \
+           source "$VENV_DIR/bin/activate" && \
+           setup_basic_packages && \
+           install_requirements; then
+            log "Successfully created fresh virtual environment"
+        else
+            log "Error: Failed to setup fresh virtual environment"
+            exit 1
+        fi
+    fi
 else
-    log "Warning: requirements.txt not found!"
-    exit 1
+    log "No existing virtual environment found, creating new one..."
+    if create_venv && \
+       source "$VENV_DIR/bin/activate" && \
+       setup_basic_packages && \
+       install_requirements; then
+        log "Successfully created virtual environment"
+    else
+        log "Error: Failed to setup virtual environment"
+        exit 1
+    fi
 fi
 
 # Run application
