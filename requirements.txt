@@ -2,6 +2,7 @@
 # Activate in Windows: .\notion\Scripts\activate
 # Activate in Linux: source notion/bin/activate
 # To install: pip install -r requirements.txt
+# To run: python app.py
 requests
 python-dotenv
 pandas
@@ -12,3 +13,5 @@ networkx
 aiohttp
 fpdf
 openpyxl
+streamlit
+scipy

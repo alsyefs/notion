@@ -1,8 +1,9 @@
 # Ignore keys file
 secret.py
 
-run_script_linux.sh
-run_script_windows.bat
+run_notion_script_linux.sh
+run_notion_script_windows.bat
+participants_table.py
 # Ignore data folder
 data/
 # Ignore analysis output
@@ -13,3 +14,7 @@ __pycache__/
 # Ignore log files
 *.log
 logs/
+# Ignore virtual environment folder
+venv/
+.env/
+notion/
