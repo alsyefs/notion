@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# Set the project directory
-PROJECT_DIR="/home/user/Documents/something/notion"  # Example path to project
+# # Set the project directory
+# PROJECT_DIR="/home/user/Documents/something/notion"  # Example path to project
+# OR, set the project directory dynamically to the script's location
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$PROJECT_DIR/notion"  # Path to virtual environment
 
 # Function to log messages

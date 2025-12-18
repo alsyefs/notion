@@ -1,3 +1,4 @@
+# backend/generate_reports.py
 import pandas as pd
 import os
 import datetime
@@ -5,24 +6,22 @@ import re
 import matplotlib.pyplot as plt
 import seaborn as sns
 from fpdf import FPDF
-from globals import (
+from backend.text_style import TextHelper, PrintStyle
+from backend.globals import (
     PAGES_CSV_FILE_PATH,
     REPORTS_DIR,
     TASKS_OVER_TIME_PLOT_PATH,
-    DATA_DIR,
     NAME_TO_BE_PRINTED,
+    REPORT_STATUS_CHART_PATH,
 )
-
-# Temp path for report-specific pie chart
-REPORT_STATUS_CHART_PATH = os.path.join(DATA_DIR, "report_status_chart.png")
 
 
 class PDFReport(FPDF):
-    def __init__(self, title_text, start_date_str, end_date_str):
+    def __init__(self, title_text, start_date_str, report_end_date_str):
         super().__init__()
         self.title_text = title_text
         self.start_date_str = start_date_str
-        self.end_date_str = end_date_str
+        self.report_end_date_str = report_end_date_str
 
     def header(self):
         self.set_font("Arial", "B", 14)
@@ -31,7 +30,12 @@ class PDFReport(FPDF):
         # Add Period Range
         self.set_font("Arial", "", 10)
         self.cell(
-            0, 6, f"Period: {self.start_date_str} to {self.end_date_str}", 0, 1, "C"
+            0,
+            6,
+            f"Period: {self.start_date_str} to {self.report_end_date_str}",
+            0,
+            1,
+            "C",
         )
 
         self.set_font("Arial", "I", 10)
@@ -72,7 +76,7 @@ class PDFReport(FPDF):
         else:
             full_display_name = task_name
 
-        clean_name = clean_text(full_display_name)
+        clean_name = safe_encode(TextHelper.clean_text(full_display_name))
 
         self.set_font("Arial", "B", 10)
         self.multi_cell(0, 6, f"{chr(97 + index)}. {clean_name}")
@@ -94,7 +98,7 @@ class PDFReport(FPDF):
             self.set_x(current_indent)
             parts = line.split("**")
             for i, part in enumerate(parts):
-                clean_part = clean_text(part)
+                clean_part = safe_encode(TextHelper.clean_text(part))
                 if not clean_part:
                     continue
                 if i % 2 == 1:
@@ -116,27 +120,11 @@ class PDFReport(FPDF):
             self.ln()
 
 
-def clean_text(text):
-    if not isinstance(text, str):
-        return str(text)
-    replacements = {
-        "’": "'",
-        "‘": "'",
-        "“": '"',
-        "”": '"',
-        "–": "-",
-        "—": "-",
-        "…": "...",
-        "🙌": "",
-        "🚀": "",
-        "📂": "",
-        "🚨": "",
-        "👴": "",
-        "⚖️": "Licensing: ",
-        "⚠️": "Warning: ",
-    }
-    for char, rep in replacements.items():
-        text = text.replace(char, rep)
+def safe_encode(text):
+    """
+    Handles the latin-1 encoding for FPDF.
+    Separated from clean_text because TextHelper is generic, but this is PDF-specific.
+    """
     return text.encode("latin-1", "replace").decode("latin-1")
 
 
@@ -144,6 +132,21 @@ def get_tasks_df():
     if not os.path.exists(PAGES_CSV_FILE_PATH):
         return pd.DataFrame()
     df = pd.read_csv(PAGES_CSV_FILE_PATH)
+    # Ensure columns exist to prevent KeyErrors later
+    required_cols = [
+        "Status",
+        "Priority",
+        "Due",
+        "Completed",
+        "Created",
+        "NID",
+        "Parent NID",
+        "Name",
+        "Body Content",
+    ]
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = None
     # Date conversion
     cols = ["Completed", "Created", "Due"]
     for col in cols:
@@ -152,8 +155,10 @@ def get_tasks_df():
         ).dt.tz_localize(None)
 
     # Clean Parent NID (convert float to int/str for matching)
-    df["NID"] = df["NID"].fillna(0).astype(int)
-    df["Parent NID"] = df["Parent NID"].fillna(0).astype(int)
+    df["NID"] = pd.to_numeric(df["NID"], errors="coerce").fillna(0).astype(int)
+    df["Parent NID"] = (
+        pd.to_numeric(df["Parent NID"], errors="coerce").fillna(0).astype(int)
+    )
 
     status_map = {
         "Duplicate": "duplicate",
@@ -164,7 +169,11 @@ def get_tasks_df():
         "5 Paused": "paused",
         "6 Done 🙌": "done",
     }
+    # Safely replace status, handling non-strings and missing values
+    df["Status"] = df["Status"].fillna("unknown").astype(str)
     df["Status"] = df["Status"].replace(status_map).str.lower()
+    # Normalize Priority just in case
+    df["Priority"] = df["Priority"].fillna("Note")
     return df
 
 
@@ -200,11 +209,11 @@ def generate_report_charts(goals, completed, in_progress):
         plt.close()
         return True
     except Exception as e:
-        print(f"Error generating report chart: {e}")
+        print(f"{PrintStyle.RED}Error generating report chart: {e}{PrintStyle.RESET}")
         return False
 
 
-def generate_pdf_report(period="weekly", reference_date=None):
+def generate_pdf_report(period="weekly", report_start_date=None, report_end_date=None):
     df = get_tasks_df()
     if df.empty:
         return
@@ -215,21 +224,49 @@ def generate_pdf_report(period="weekly", reference_date=None):
 
     # Determine reference date
     today = None
-    if reference_date:
+    if report_start_date:
         try:
             # Attempt to parse the provided date string
-            today = pd.to_datetime(reference_date).tz_localize(None)
+            start_date = pd.to_datetime(report_start_date).tz_localize(None)
         except Exception as e:
-            print(f"Error parsing date '{reference_date}': {e}. Defaulting to today.")
+            print(
+                f"{PrintStyle.RED}Error parsing date '{report_start_date}': {e}. Defaulting to period-based start date.{PrintStyle.RESET}"
+            )
+            start_date = None
+    if report_end_date:
+        try:
+            # Attempt to parse the provided date string
+            today = pd.to_datetime(report_end_date).tz_localize(None)
+        except Exception as e:
+            print(
+                f"{PrintStyle.RED}Error parsing date '{report_end_date}': {e}. Defaulting to today.{PrintStyle.RESET}"
+            )
             today = None
+
+    if report_start_date and report_end_date:
+        print(
+            f"{PrintStyle.CYAN}Using custom report start and end dates.{PrintStyle.RESET}"
+        )
+        start_date = pd.to_datetime(report_start_date).tz_localize(None)
+        today = pd.to_datetime(report_end_date).tz_localize(None)
+        title = f"Status Report - {start_date.strftime('%Y-%m-%d')} to {today.strftime('%Y-%m-%d')}"
+        filename = f"report_{start_date.strftime('%Y-%m-%d')}_to_{today.strftime('%Y-%m-%d')}.pdf"
 
     if today is None:
         today = pd.Timestamp.now().tz_localize(None)
 
-    if period == "weekly":
+    if period == "daily":
+        start_date = today - datetime.timedelta(days=1)
+        title = f"Daily Status Report - {today.strftime('%Y-%m-%d')}"
+        filename = f"daily_{today.strftime('%Y-%m-%d')}.pdf"
+    elif period == "weekly":
         start_date = today - datetime.timedelta(days=7)
         title = f"Weekly Status Report - Week {today.isocalendar()[1]}"
         filename = f"weekly_{today.strftime('%Y-%m-%d')}.pdf"
+    elif period == "biweekly":
+        start_date = today - datetime.timedelta(days=14)
+        title = f"Biweekly Status Report - Weeks {today.isocalendar()[1]-1} & {today.isocalendar()[1]}"
+        filename = f"biweekly_{today.strftime('%Y-%m-%d')}.pdf"
     elif period == "monthly":
         start_date = today - datetime.timedelta(days=30)
         title = f"Monthly Status Report - {today.strftime('%B %Y')}"
@@ -258,7 +295,12 @@ def generate_pdf_report(period="weekly", reference_date=None):
         & (df["Completed"] <= today)
     ]
     in_progress = df[df["Status"] == "doing"]
-
+    # Catch-all for tasks that don't fit the specific template statuses (e.g. if Status column is missing)
+    uncategorized = df[
+        ~df["Status"].isin(
+            ["to do", "doing", "done", "canceled", "duplicate", "notes", "paused"]
+        )
+    ]
     # --- Generate PDF ---
     os.makedirs(REPORTS_DIR, exist_ok=True)
     output_path = os.path.join(REPORTS_DIR, filename)
@@ -301,6 +343,16 @@ def generate_pdf_report(period="weekly", reference_date=None):
     else:
         pdf.chapter_body("No tasks currently in progress.")
 
+    # Section 4: Uncategorized / Backlog (The "Worst Case" Handler)
+    # If the user's database doesn't have a "Status" property, everything ends up here.
+    if not uncategorized.empty:
+        pdf.chapter_title(4, "Uncategorized / Other Tasks")
+        pdf.chapter_body(
+            "These tasks do not match standard status filters (To Do, Doing, Done)."
+        )
+        for i, (_, row) in enumerate(uncategorized.iterrows()):
+            pdf.add_task_item(i, row["Name"])
+
     # --- Add Charts ---
     # 1. Report Specific Status Chart (Generated on the fly)
     if generate_report_charts(goals, completed, in_progress):
@@ -308,11 +360,12 @@ def generate_pdf_report(period="weekly", reference_date=None):
             "Work Distribution (This Period)", REPORT_STATUS_CHART_PATH
         )
 
-    # # 2. Velocity Chart (Global Trend)
-    # pdf.add_chart_section("Weekly Velocity (Trend)", TASKS_OVER_TIME_PLOT_PATH)
+    # 2. Velocity Chart (Global Trend)
+    if os.path.exists(TASKS_OVER_TIME_PLOT_PATH):
+        pdf.add_chart_section("Tasks Over time", TASKS_OVER_TIME_PLOT_PATH)
 
     pdf.output(output_path, "F")
-    print(f"Report generated: {output_path}")
+    PrintStyle.print_saved("Report", output_path)
 
 
 if __name__ == "__main__":

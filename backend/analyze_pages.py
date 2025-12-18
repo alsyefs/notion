@@ -1,3 +1,4 @@
+# backend/analyze_pages.py
 import pandas as pd
 import datetime
 import matplotlib.pyplot as plt
@@ -7,7 +8,8 @@ import matplotlib
 import networkx as nx
 import os
 import ast  # To parse string representation of lists
-from globals import (
+from backend.text_style import PrintStyle, TextHelper
+from backend.globals import (
     PAGES_CSV_FILE_PATH,
     ANALYSIS_OUTPUT_FILE_PATH,
     TASKS_BY_STATUS_PLOT_PATH,
@@ -22,17 +24,62 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 matplotlib.rcParams["font.family"] = "DejaVu Sans"
 
 
-def format_section_header(text: str) -> str:
-    return f"\n{'='*80}\n{text.upper()}\n{'='*80}\n"
-
-
-def format_subsection_header(text: str) -> str:
+def file_header(text):
     return f"\n{'-'*40}\n{text}\n{'-'*40}\n"
 
 
 def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE_PATH):
     tasks_df = pd.read_csv(csv_file)
 
+    # Ensure critical columns exist even if the CSV didn't have them
+    expected_columns = [
+        "Status",
+        "Priority",
+        "Due",
+        "Created",
+        "Completed",
+        "Started",
+        "Children NIDs",
+        "NID",
+    ]
+    for col in expected_columns:
+        if col not in tasks_df.columns:
+            tasks_df[col] = None  # Create missing column
+    # 1. Fill NaN NIDs with 0 (or -1) so we can convert to int (we force it to be integer)
+    tasks_df["NID"] = (
+        pd.to_numeric(tasks_df["NID"], errors="coerce").fillna(0).astype(int)
+    )
+
+    # Fill NaN values for logic safety
+    tasks_df["Status"] = tasks_df["Status"].fillna("unknown")
+    tasks_df["Priority"] = tasks_df["Priority"].fillna(
+        "Note"
+    )  # Default to lowest priority
+    tasks_df["Name"] = tasks_df["Name"].fillna("Untitled")
+
+    PrintStyle.print_subheader("ANALYZING DATA AVAILABILITY")
+
+    status_ok = tasks_df["Status"].notna().any()
+    priority_ok = tasks_df["Priority"].notna().any()
+    due_ok = tasks_df["Due"].notna().any()
+
+    if not status_ok:
+        PrintStyle.print_warning(
+            "'Status' data is missing. Workflow analysis will be generic."
+        )
+    if not priority_ok:
+        PrintStyle.print_warning(
+            "'Priority' data is missing. Treating all tasks as normal priority."
+        )
+    if not due_ok:
+        PrintStyle.print_warning(
+            "'Due Date' data is missing. Overdue/Timeline analysis skipped."
+        )
+
+    if status_ok and priority_ok and due_ok:
+        PrintStyle.print_success("All critical analysis data is available.")
+
+    PrintStyle.print_divider()
     # --- PRE-PROCESSING ---
     # Convert dates with robust parsing using utc=True to handle mixed timezones
     tasks_df["Due Date"] = pd.to_datetime(
@@ -75,30 +122,68 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
     with open(output_file, "w", encoding="utf-8") as f:
         with redirect_stdout(f):
             # 1. Weekly Workflow
-            print(format_section_header("🚀 THIS WEEK'S WORKFLOW"))
+            print(f"\n{'='*80}\n🚀 THIS WEEK'S WORKFLOW\n{'='*80}\n")
             analyze_weekly_focus(tasks_df)
 
             # 2. Project Status
-            print(format_section_header("📂 Active Projects (Containers)"))
+            print(f"\n{'='*80}\n📂 Active Projects (Containers)\n{'='*80}\n")
             analyze_active_projects(tasks_df)
 
             # 3. Standard Analysis
-            print(format_section_header("Task Statistics"))
+            print(f"\n{'='*80}\n📊 Task Statistics\n{'='*80}\n")
             analyze_task_summary(tasks_df)
 
-            print(format_section_header("Backlog Analysis"))
+            print(f"\n{'='*80}\n📋 Backlog Analysis\n{'='*80}\n")
             analyze_task_dates(tasks_df)  # Overdue
             analyze_task_priorities(tasks_df)  # Priority breakdown
             analyze_upcoming_tasks(tasks_df)  # General upcoming
 
+            # 4. Uncategorized (The "Worst Case" Handler)
+            # This ensures that even if columns are missing, you see what was fetched.
+            print(f"\n{'='*80}\n⚠️ Unclassified / Other Tasks\n{'='*80}\n")
+            analyze_uncategorized(tasks_df)
+
     generate_charts(tasks_df)
-    print(f"Analysis results saved to {output_file}")
+    PrintStyle.print_saved("Text report", output_file)
 
 
-def truncate_task_name(name: str, max_length: int = 60) -> str:
-    if not isinstance(name, str):
-        return str(name)
-    return f"{name[:max_length-3]}..." if len(name) > max_length else name
+def analyze_uncategorized(df: pd.DataFrame):
+    """
+    Lists tasks that do not match any standard Status.
+    Useful for debugging when a user connects a database with different property names.
+    """
+    # Filter for items that are NOT in the standard known statuses
+    known_statuses = [
+        "to do",
+        "doing",
+        "done",
+        "canceled",
+        "duplicate",
+        "notes",
+        "paused",
+    ]
+
+    # Check if 'Status' column even has meaningful data or if it's all "unknown"
+    uncategorized = df[~df["Status"].str.lower().isin(known_statuses)].copy()
+
+    if not uncategorized.empty:
+        print("These items have a Status that is not recognized (or missing):")
+        # Print a simple table of these items
+        cols = ["NID", "Name", "Status", "Created"]
+
+        # Format for display
+        display = uncategorized[cols].copy()
+        # This prevents "0" from showing as "0.0" if pandas reverts type during slicing
+        display["NID"] = display["NID"].astype(int).astype(str)
+        display["Name"] = display["Name"].apply(TextHelper.truncate_text)
+        display["Created"] = display["Created"].apply(
+            lambda x: str(x).split(" ")[0]
+        )  # Show only date
+
+        print(display.to_string(index=False))
+        print(f"\nTotal Unclassified Items: {len(uncategorized)}")
+    else:
+        print("All items are properly classified into standard statuses.")
 
 
 def print_task_table(df):
@@ -108,8 +193,10 @@ def print_task_table(df):
         return
 
     display_df = df.copy()
-    display_df["Name"] = display_df["Name"].apply(truncate_task_name)
-    display_df["Due"] = display_df["Due"].fillna("No Date")
+    # Explicitly format NID for the print view
+    display_df["NID"] = display_df["NID"].astype(int).astype(str)
+    display_df["Name"] = display_df["Name"].apply(TextHelper.truncate_text)
+    display_df["Due"] = display_df["Due"].fillna("None")
 
     cols = ["NID", "Name", "Status", "Priority", "Due"]
     print(display_df[cols].to_string(index=False))
@@ -138,7 +225,7 @@ def analyze_weekly_focus(df: pd.DataFrame):
         )
     ].sort_values(by=["Priority_Score", "Due Date"])
 
-    print(format_subsection_header("1. IMMEDIATE ACTION (Overdue & Dated Active)"))
+    print(file_header("1. IMMEDIATE ACTION (Overdue & Dated Active)"))
     if not immediate.empty:
         print_task_table(immediate)
     else:
@@ -151,15 +238,11 @@ def analyze_weekly_focus(df: pd.DataFrame):
         & (~active_items["NID"].isin(immediate["NID"]))
     ].sort_values(by=["Due Date", "Priority_Score"])
 
-    print(
-        format_subsection_header(
-            f"2. DUE THIS WEEK (By {next_week.strftime('%Y-%m-%d')})"
-        )
-    )
+    print(file_header(f"2. DUE BY NEXT WEEK (By {next_week.strftime('%Y-%m-%d')})"))
     if not due_week.empty:
         print_task_table(due_week)
     else:
-        print("No additional tasks due this week.")
+        print("No additional tasks due by next week.")
 
     # --- 3. BACKLOG (Undated or Far Future) ---
     candidates_backlog = active_items[
@@ -175,9 +258,7 @@ def analyze_weekly_focus(df: pd.DataFrame):
     else:
         backlog = undated_backlog.sort_values(by=["Priority_Score", "Created Date"])
 
-    print(
-        format_subsection_header("3. HIGH PRIORITY BACKLOG (Undated Active & Future)")
-    )
+    print(file_header("3. HIGH PRIORITY BACKLOG (Undated Active & Future)"))
     if not backlog.empty:
         print_task_table(backlog.head(15))
     else:
@@ -222,7 +303,7 @@ def analyze_task_dates(tasks_df: pd.DataFrame):
     overdue = incomplete[incomplete["Due Date"] < today]
 
     if not overdue.empty:
-        print(format_subsection_header(f"🚨 Overdue Tasks ({len(overdue)})"))
+        print(file_header(f"🚨 Overdue Tasks ({len(overdue)})"))
         print_task_table(overdue)
 
 
@@ -234,7 +315,7 @@ def analyze_task_priorities(tasks_df: pd.DataFrame):
     ]
 
     if not critical_high.empty:
-        print(format_subsection_header("Critical/High Priority Actions (All)"))
+        print(file_header("Critical/High Priority Actions (All)"))
         print_task_table(critical_high)
 
 
@@ -245,11 +326,11 @@ def analyze_upcoming_tasks(tasks_df: pd.DataFrame):
     ]
     oldest_pending = pending_tasks.nsmallest(5, "Created Date")
 
-    print(format_subsection_header("👴 Oldest Stagnant Tasks"))
+    print(file_header("👴 Oldest Stagnant Tasks"))
     cols = ["NID", "Name", "Created", "Priority", "Due"]
     display = oldest_pending.copy()
-    display["Name"] = display["Name"].apply(truncate_task_name)
-    display["Due"] = display["Due"].fillna("No Date")
+    display["Name"] = display["Name"].apply(TextHelper.truncate_text)
+    display["Due"] = display["Due"].fillna("None")
     print(display[cols].to_string(index=False))
 
 
@@ -264,7 +345,6 @@ def generate_charts(tasks_df: pd.DataFrame):
         ].copy()
 
         if not completed_tasks.empty:
-            # FIX: Added utc=True and .dt.tz_localize(None) to handle mixed timezones and offsets
             completed_tasks["Completed"] = pd.to_datetime(
                 completed_tasks["Completed"], format="mixed", errors="coerce", utc=True
             ).dt.tz_localize(None)
@@ -279,7 +359,7 @@ def generate_charts(tasks_df: pd.DataFrame):
 
             x_dates = last_12_weeks.index.strftime("%Y-%m-%d")
 
-            # FIX: Explicitly set ticks to match the number of labels to fix UserWarning
+            # Explicitly set ticks to match the number of labels to fix UserWarning
             ax.set_xticks(range(len(x_dates)))
             ax.set_xticklabels(labels=x_dates, rotation=45, ha="right")
 
@@ -289,9 +369,12 @@ def generate_charts(tasks_df: pd.DataFrame):
             plt.tight_layout()
             plt.savefig(TASKS_OVER_TIME_PLOT_PATH)
             plt.close()
-            print(f"Chart generated: {TASKS_OVER_TIME_PLOT_PATH}")
+            PrintStyle.print_saved("Chart", TASKS_OVER_TIME_PLOT_PATH)
         else:
-            print("No completed tasks data found for Velocity chart.")
+            # Use dim text for non-critical info
+            print(
+                f"{PrintStyle.DIM}  ℹ️  No completed tasks data found for Velocity chart.{PrintStyle.RESET}"
+            )
 
         # --- Chart 2: Status Distribution (Global) ---
         status_counts = tasks_df["Status"].value_counts()
@@ -307,7 +390,7 @@ def generate_charts(tasks_df: pd.DataFrame):
             plt.title("All-Time Task Status")
             plt.savefig(TASKS_BY_STATUS_PLOT_PATH)
             plt.close()
-            print(f"Chart generated: {TASKS_BY_STATUS_PLOT_PATH}")
+            PrintStyle.print_saved("Chart", TASKS_BY_STATUS_PLOT_PATH)
 
         # --- Chart 3: Priority Distribution (Global) ---
         priority_counts = tasks_df["Priority"].value_counts()
@@ -317,7 +400,7 @@ def generate_charts(tasks_df: pd.DataFrame):
             plt.title("All-Time Task Priority")
             plt.savefig(TASKS_BY_PRIORITY_PLOT_PATH)
             plt.close()
-            print(f"Chart generated: {TASKS_BY_PRIORITY_PLOT_PATH}")
+            PrintStyle.print_saved("Chart", TASKS_BY_PRIORITY_PLOT_PATH)
 
     except Exception as e:
         print(f"Could not generate charts: {e}")

@@ -1,0 +1,77 @@
+Total tasks: 423
+Completed tasks: 0
+In Progress tasks: 0
+Not started tasks: 423
+Percentage of tasks completed: 0.00%
+Less than half of the tasks are completed. Consider prioritizing the most important tasks to boost progress.
+Overdue tasks: 24
+Overdue tasks:
+     NID  Name      Due       Priority
+53   474  Task 1  2021-06-14   Medium
+302  196  Task 2  2022-08-24     High
+408  419  Task 3  2019-05-30     Note
+Top 30 overdue tasks by priority:
+     NID   Name     Due       Priority
+406  475  Task 33  2022-11-13     High
+53   474  Task 31  2021-06-14   Medium
+You have overdue tasks. It's crucial to address these as soon as possible to avoid delays.
+Average time to complete tasks: 5.12 days
+Tasks are being completed in a timely manner. Keep up the efficiency!
+Tasks by priority:
+Priority
+Critical    153
+High        116
+Medium      115
+Low          24
+Note          2
+Name: count, dtype: int64
+There are critical or high-priority tasks that need attention. Make sure these are addressed first.
+Tasks to work on next based on priority:
+
+Priority: Critical
+     NID  Name      Due
+11   529  Task 309  NaN
+12   528  Task 909  2019-05-30
+
+Priority: High
+     NID   Name               Due
+31   654   Task 999         2030-08-24
+57   659   Task 777         2029-08-24
+
+Priority: Medium
+     NID   Name               Due
+31   159   Task 929         2031-08-24
+57   376   Task 727         2028-08-24
+
+Priority: Low
+     NID   Name               Due
+31   321   Task 930         2032-08-24
+57   934   Task 728         2027-08-24
+
+Priority: Note
+     NID   Name               Due
+31   893   Task 930         2032-08-24
+57   956   Task 728         2027-08-24
+
+Breakdown of tasks by Status and Priority:
+Priority   Critical  High  Low  Medium  Note
+Status                                      
+canceled          4     8    1       2     0
+doing             4     7    0       5     1
+done            137    61    5      50     0
+duplicate         0     1    0       0     0
+notes             0     0    0       0     1
+paused            0     1    0       3     0
+to do             8    37   18      55     0
+Tasks due in the next 7 days:
+No tasks due in the next 7 days.
+No tasks are due in the next 7 days. This might be a good time to get ahead or revisit pending tasks.
+Longest pending tasks:
+     NID    Name    Created Date        Status
+132    549  Task 838 2023-08-08 00:58:00  to do
+945    312  Task 654 2023-08-08 00:58:00  to do
+Tasks created per week:
+Week Created
+2019-08-07/2019-08-13    20
+2019-08-14/2019-08-20    21
+Freq: W-SUN, dtype: int64

@@ -3,11 +3,12 @@ secret.py
 
 run_notion_script_linux.sh
 run_notion_script_windows.bat
-participants_table.py
+backend/participants_table.py
 # Ignore data folder
-data/
+backend/data/
+backend/data-backup/
 # Ignore analysis output
-data/analysis/
+backend/data-backup/analysis/
 # Ignore Python bytecode files
 *.pyc
 __pycache__/
@@ -18,3 +19,4 @@ logs/
 venv/
 .env/
 notion/
+.env

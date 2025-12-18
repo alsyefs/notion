@@ -54,7 +54,7 @@ At the first run, it might take a while to fetch all the data depending on the a
 
 ## Configuration Setup
 
-For security, create a `secret.py` file in the root directory. This file is excluded from version control. Add the following variables:
+For security, create a `.env` file in the root directory using the provided sample in [`.env.example`](samples/.env.example). This file is excluded from version control. Add the following variables:
 
 1. `NOTION_API_TOKEN`: Your Notion integration token.
 2. `NOTION_DATABASE_ID`: The ID of the database you want to track.
@@ -62,7 +62,7 @@ For security, create a `secret.py` file in the root directory. This file is excl
 4. `PAGES_JSON_FILE_NAME`: Desired name for the raw JSON data.
 5. `NAME_TO_BE_PRINTED`: The name displayed in the "Prepared by" section of the PDF reports.
 
-### Example of `secret.py`:
+### Example of `.env`:
 ```python
 NOTION_API_TOKEN = "secret_your_notion_integration_token"
 NOTION_DATABASE_ID = "your_database_id_here"
@@ -103,7 +103,7 @@ This repository includes scripts that automatically set up the virtual environme
 
 ### Option 2: Manual Execution
 
-After activating your virtual environment and ensuring `secret.py` is configured, simply run as:
+After activating your virtual environment and ensuring `.env` is configured, simply run as:
 ```python
 python app.py
 ```
@@ -116,18 +116,18 @@ The application runs in 4 stages:
 ---
 
 ## Output Structure
-After running, a `data/` folder will be created with the following structure:
+After running, a `backend/data/` folder will be created with the following structure:
 ```plaintext
-data/
-├── analysis/
-│   ├── analysis_output.txt       # Text summary of workflow and backlog
-│   ├── tasks_by_priority.png     # Generated chart
-│   ├── tasks_over_time.png       # Generated chart
-│   └── ...
-├── attachments/                  # Downloaded files from Notion pages
-├── reports/                      # Generated PDF Reports (Weekly/Monthly)
-├── notion_pages.csv              # Raw data cache
-└── notion_pages.json             # Raw data JSON
+backend/data/
+         ├── analysis/
+         │   ├── analysis_output.txt       # Text summary of workflow and backlog
+         │   ├── tasks_by_priority.png     # Generated chart
+         │   ├── tasks_over_time.png       # Generated chart
+         │   └── ...
+         ├── attachments/                  # Downloaded files from Notion pages
+         ├── reports/                      # Generated PDF Reports (Weekly/Monthly)
+         ├── notion_pages.csv              # Raw data cache
+         └── notion_pages.json             # Raw data JSON
 ```
 
 ---
@@ -168,17 +168,21 @@ The code assumes your Notion database contains the following properties (columns
 
 ## Usage
 You can use a script to automate the whole process of running.
-First, change the file path to the root of the project in either [`sample_run_script_windows.bat`](extras/sample_run_script_windows.bat) (for Windows) or [`sample_run_script_linux.sh`](extras/sample_run_script_linux.sh) (for Linux) depending on system. Then, double-click on the script file and wait for the fetching process to complete.
+First, change the file path to the root of the project in either [`sample_run_script_windows.bat`](samples/sample_run_script_windows.bat) (for Windows) or [`sample_run_script_linux.sh`](samples/sample_run_script_linux.sh) (for Linux) depending on system. Then, double-click on the script file and wait for the fetching process to complete.
 
 
-After running the script, you will receive reports, inside the directory `data/`, like the following (only 2 charts are shown here, but you will get more):
-![Sample Report](extras/sample_task_completion_times.png)
-![Sample Report](extras/sample_tasks_by_priority.png)
+After running the script, you will receive reports, inside the directory `backend/data/`, like the following (only 2 charts are shown here, but you will get more):
+![Sample Report](samples/sample_task_completion_times.png)
+![Sample Report](samples/sample_tasks_by_priority.png)
 
 And here is a sample report file generated after fetching Notion Pages: 
-[`sample_analysis_output.txt`](extras/sample_analysis_output.txt)
+[`sample_analysis_output.txt`](samples/sample_analysis_output.txt)
 
-Additionally, you will get pdf reports (weekly & monthly).
+Additionally, you will get pdf reports (if you want, you can edit the periods in `app.py`).
+* **Weekly**: [`sample_weekly_2020-01-01.pdf`](samples/sample_weekly_2020-01-01.pdf).
+* **Biweekly**: [`sample_biweekly_2020-01-01.pdf`](samples/sample_biweekly_2020-01-01.pdf).
+* **Monthly**: [`sample_monthly_2020-01-01.pdf`](samples/sample_monthly_2020-01-01.pdf).
+* **Yearly**: [`sample_yearly_2020-01-01.pdf`](samples/sample_yearly_2020-01-01.pdf).
 
 ---
 
@@ -188,4 +192,4 @@ Contributions are welcome! Please open an issue or submit a pull request.
 ---
 
 ## License
-This project is licensed under the MIT License - see the [`LICENSE`](extras/LICENSE) file for details.
+This project is licensed under the MIT License - see the [`LICENSE`](LICENSE) file for details.

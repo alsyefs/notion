@@ -1,8 +1,10 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-:: Set the project directory (update this path to your Windows path)
-set PROJECT_DIR=C:\path\to\your\project
+@REM :: Set the project directory (update this path to your Windows path)
+@REM set PROJECT_DIR=C:\path\to\your\project
+:: OR, set the project directory dynamically to the script's location
+set "PROJECT_DIR=%~dp0"
 set VENV_DIR=%PROJECT_DIR%\notion
 
 goto :main
