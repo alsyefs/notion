@@ -7,8 +7,8 @@ from backend.generate_reports import generate_pdf_report
 from backend.text_style import PrintStyle
 from backend.globals import REPORT_START_DATE, REPORT_END_DATE, FETCH_ITEM_LIMIT
 
-# REPORT_START_DATE = "2025-12-18"  # Testing
-# REPORT_END_DATE = "2025-12-18"  # Testing
+# REPORT_START_DATE = "2022-12-18"  # Testing
+# REPORT_END_DATE = "2027-02-18"  # Testing
 
 
 def main():
