@@ -17,6 +17,8 @@ from backend.globals import (
     TASKS_OVER_TIME_PLOT_PATH,
     TASK_COMPLETION_TIMES_PLOT_PATH,
     TASKS_REPLATIONSHIPS_PLOT_PATH,
+    INCLUDE_UNCATEGORIZED,
+    FILTER_TAGS,
 )
 
 # Visualization settings
@@ -30,6 +32,14 @@ def file_header(text):
 
 def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE_PATH):
     tasks_df = pd.read_csv(csv_file)
+    if tasks_df.empty:
+        PrintStyle.print_warning("The database is empty. No analysis to perform.")
+        return
+
+    # Clean column names by stripping whitespace (fixes "Status " vs "Status")
+    tasks_df.columns = tasks_df.columns.str.strip()
+    # DEBUG: Print columns to verify what Pandas actually sees (Remove this later if you want)
+    PrintStyle.print_info(f"Loaded CSV Columns: {list(tasks_df.columns)}")
 
     # Ensure critical columns exist even if the CSV didn't have them
     expected_columns = [
@@ -41,22 +51,50 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
         "Started",
         "Children NIDs",
         "NID",
+        "Name",
+        "Tags",
+        "Parent Tags",
     ]
     for col in expected_columns:
         if col not in tasks_df.columns:
             tasks_df[col] = None  # Create missing column
+
+    # Parse Tags for filtering (convert string representation of list back to list)
+    def parse_list_col(x):
+        try:
+            return (
+                ast.literal_eval(x)
+                if isinstance(x, str)
+                else (x if isinstance(x, list) else [])
+            )
+        except Exception:
+            return []
+
+    if "Tags" not in tasks_df.columns:
+        tasks_df["Tags"] = None
+    if "Parent Tags" not in tasks_df.columns:
+        tasks_df["Parent Tags"] = None
+
+    # Apply Tag Filtering
+    if FILTER_TAGS:
+        # Check if any of the FILTER_TAGS exist in 'Tags' or 'Parent Tags'
+        def match_tags(row):
+            row_tags = parse_list_col(row["Tags"])
+            parent_tags = parse_list_col(row["Parent Tags"])
+            all_tags = set(row_tags + parent_tags)
+            # Returns True if intersection is not empty
+            return not all_tags.isdisjoint(FILTER_TAGS)
+
+        original_count = len(tasks_df)
+        tasks_df = tasks_df[tasks_df.apply(match_tags, axis=1)].copy()
+        PrintStyle.print_info(
+            f"Filtered tasks by tags {FILTER_TAGS}: {len(tasks_df)}/{original_count} remain."
+        )
+
     # 1. Fill NaN NIDs with 0 (or -1) so we can convert to int (we force it to be integer)
     tasks_df["NID"] = (
         pd.to_numeric(tasks_df["NID"], errors="coerce").fillna(0).astype(int)
     )
-
-    # Fill NaN values for logic safety
-    tasks_df["Status"] = tasks_df["Status"].fillna("unknown")
-    tasks_df["Priority"] = tasks_df["Priority"].fillna(
-        "Note"
-    )  # Default to lowest priority
-    tasks_df["Name"] = tasks_df["Name"].fillna("Untitled")
-
     PrintStyle.print_subheader("ANALYZING DATA AVAILABILITY")
 
     status_ok = tasks_df["Status"].notna().any()
@@ -78,6 +116,12 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
 
     if status_ok and priority_ok and due_ok:
         PrintStyle.print_success("All critical analysis data is available.")
+
+    # Fill NaN values for logic safety
+    tasks_df["Status"] = tasks_df["Status"].fillna("unknown")
+    # Default to lowest priority:
+    tasks_df["Priority"] = tasks_df["Priority"].fillna("Note")
+    tasks_df["Name"] = tasks_df["Name"].fillna("Untitled")
 
     PrintStyle.print_divider()
     # --- PRE-PROCESSING ---
@@ -139,9 +183,10 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
             analyze_upcoming_tasks(tasks_df)  # General upcoming
 
             # 4. Uncategorized (The "Worst Case" Handler)
-            # This ensures that even if columns are missing, you see what was fetched.
-            print(f"\n{'='*80}\n⚠️ Unclassified / Other Tasks\n{'='*80}\n")
-            analyze_uncategorized(tasks_df)
+            # This ensures that even if columns are missing, you see what was fetched while respecting the toggle
+            if INCLUDE_UNCATEGORIZED:
+                print(f"\n{'='*80}\n⚠️ Unclassified / Other Tasks\n{'='*80}\n")
+                analyze_uncategorized(tasks_df)
 
     generate_charts(tasks_df)
     PrintStyle.print_saved("Text report", output_file)

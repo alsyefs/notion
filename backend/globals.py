@@ -1,3 +1,5 @@
+# backend/globals.py
+
 # Python --version: 3.11.6
 # 1. to create venv: python -m venv notion
 # 2. to install requirements: pip install -r requirements.txt
@@ -76,3 +78,27 @@ NOTION_PROPERTY_PRIORITY = os.getenv("NOTION_PROPERTY_PRIORITY", "Priority")
 NOTION_PROPERTY_FILES_MEDIA = os.getenv("NOTION_PROPERTY_FILES_MEDIA", "Files & media")
 NOTION_PROPERTY_PARENT_ITEM = os.getenv("NOTION_PROPERTY_PARENT_ITEM", "Parent item")
 NOTION_PROPERTY_SUB_ITEM = os.getenv("NOTION_PROPERTY_SUB_ITEM", "Sub-item")
+NOTION_PROPERTY_TAGS = os.getenv("NOTION_PROPERTY_TAGS", "Tags")
+NOTION_PROPERTY_PARENT_TAGS = os.getenv("NOTION_PROPERTY_PARENT_TAGS", "Parent Tags")
+
+#################################################################
+################# PDF REPORT CONFIGURATION ######################
+#################################################################
+# REPORT CONFIGURATION
+# Set to False to exclude the body text (notes) of the tasks from the PDF
+INCLUDE_BODY_CONTENT = True
+# Truncate body content to a specific number of lines. Set to 0 for no limit.
+# REQUIRES INCLUDE_BODY_CONTENT = True
+BODY_CONTENT_MAX_LINES = 3
+# Set to False to exclude attachment links and content from the PDF
+INCLUDE_ATTACHMENTS = False
+# Set to False to hide the "Uncategorized / Other Tasks" section in reports
+INCLUDE_UNCATEGORIZED = False
+# Filter tasks by specific tags. Leave empty [] to include all tasks.
+# Example: FILTER_TAGS = ["tag-text-1", "tag-text-2"]
+FILTER_TAGS = (
+    os.getenv("NOTION_TAGS_LIST").split(",") if os.getenv("NOTION_TAGS_LIST") else []
+)
+# Files with these extensions will have their content read and added to the report
+# CSV and Excel are excluded to prevent formatting issues in the PDF
+READABLE_EXTENSIONS = [".txt", ".md", ".py", ".json", ".log", ".html", ".css", ".js"]

@@ -22,6 +22,8 @@ from backend.globals import (
     NOTION_PROPERTY_FILES_MEDIA,
     NOTION_PROPERTY_PARENT_ITEM,
     NOTION_PROPERTY_SUB_ITEM,
+    NOTION_PROPERTY_TAGS,
+    NOTION_PROPERTY_PARENT_TAGS,
 )
 
 headers = {
@@ -374,6 +376,25 @@ async def process_page(result, session):
     ]
     children_nids = [await fetch_page_nid(uid, session) for uid in children_uids]
 
+    tags_list = safe_get(properties, NOTION_PROPERTY_TAGS, "multi_select") or []
+    tags = [tag["name"] for tag in tags_list] if tags_list else []
+
+    # Fetch Parent Tags (Rollup or Multi-select)
+    # Handle Rollup (array) or direct property
+    p_tags_prop = properties.get(NOTION_PROPERTY_PARENT_TAGS, {})
+    parent_tags = []
+    if p_tags_prop.get("type") == "rollup":
+        # Rollups can be arrays of multi_select arrays
+        rollup_array = p_tags_prop.get("rollup", {}).get("array", [])
+        for item in rollup_array:
+            if item.get("type") == "multi_select":
+                parent_tags.extend([t["name"] for t in item.get("multi_select", [])])
+    elif p_tags_prop.get("type") == "multi_select":
+        parent_tags = [t["name"] for t in p_tags_prop.get("multi_select", [])]
+
+    # Remove duplicates from parent tags
+    parent_tags = list(set(parent_tags))
+
     comments = await fetch_comments(page_id, session)
     comment_texts = [
         comment["rich_text"][0].get("plain_text", "")
@@ -401,6 +422,8 @@ async def process_page(result, session):
         "Parent NID": parent_nid,
         "Children UIDs": children_uids,
         "Children NIDs": children_nids,
+        "Tags": tags,
+        "Parent Tags": parent_tags,
         "Comments": comments_str,
     }
 
@@ -454,6 +477,8 @@ def check_schema_health(first_task_properties):
         ("Started", NOTION_PROPERTY_STARTED),
         ("Completed", NOTION_PROPERTY_COMPLETED),
         ("Files", NOTION_PROPERTY_FILES_MEDIA),
+        ("Tags", NOTION_PROPERTY_TAGS),
+        ("Parent Tags", NOTION_PROPERTY_PARENT_TAGS),
     ]
 
     missing_count = 0
@@ -474,6 +499,16 @@ def check_schema_health(first_task_properties):
         print(
             f"{PrintStyle.YELLOW}{PrintStyle.BOLD}⚠️  WARNING: {missing_count} configured properties were not found in Notion.{PrintStyle.RESET}"
         )
+        # We now print the list of missing properties from the above message:
+        PrintStyle.print_info("Missing properties:")
+        for label, prop_name in checks:
+            if prop_name not in first_task_properties:
+                PrintStyle.print_info(f"- {prop_name} ({label})")
+        # For debugging, we print all available properties from Notion too:
+        PrintStyle.print_info("Available properties in Notion:")
+        for prop in first_task_properties.keys():
+            PrintStyle.print_info(f"- {prop}")
+
         PrintStyle.print_info(
             "Check your .env file if you renamed these columns in Notion."
         )

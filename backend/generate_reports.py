@@ -3,16 +3,24 @@ import pandas as pd
 import os
 import datetime
 import re
+import ast
 import matplotlib.pyplot as plt
 import seaborn as sns
 from fpdf import FPDF
 from backend.text_style import TextHelper, PrintStyle
 from backend.globals import (
     PAGES_CSV_FILE_PATH,
+    PAGES_ATTACHMENT_DIR,
     REPORTS_DIR,
     TASKS_OVER_TIME_PLOT_PATH,
     NAME_TO_BE_PRINTED,
     REPORT_STATUS_CHART_PATH,
+    INCLUDE_BODY_CONTENT,
+    INCLUDE_ATTACHMENTS,
+    READABLE_EXTENSIONS,
+    INCLUDE_UNCATEGORIZED,
+    BODY_CONTENT_MAX_LINES,
+    FILTER_TAGS,
 )
 
 
@@ -83,6 +91,13 @@ class PDFReport(FPDF):
 
         if task_body and isinstance(task_body, str) and task_body.strip():
             self.set_font("Arial", "", 10)
+            # Truncate page body text content
+            if BODY_CONTENT_MAX_LINES > 0:
+                lines = task_body.split("\n")
+                if len(lines) > BODY_CONTENT_MAX_LINES:
+                    lines = lines[:BODY_CONTENT_MAX_LINES]
+                    lines.append(f"... (Truncated to {BODY_CONTENT_MAX_LINES} lines)")
+                    task_body = "\n".join(lines)
             self.render_markdown(task_body)
             self.ln(2)
 
@@ -148,7 +163,7 @@ def get_tasks_df():
         if col not in df.columns:
             df[col] = None
     # Date conversion
-    cols = ["Completed", "Created", "Due"]
+    cols = ["Completed", "Created", "Due", "Updated Time"]
     for col in cols:
         df[col] = pd.to_datetime(
             df[col], errors="coerce", format="mixed", utc=True
@@ -156,9 +171,38 @@ def get_tasks_df():
 
     # Clean Parent NID (convert float to int/str for matching)
     df["NID"] = pd.to_numeric(df["NID"], errors="coerce").fillna(0).astype(int)
+    # Logic to fill missing Completed dates with Updated Time if the status is Done
+    # This fixes the issue where pages without explicit dates were behaving unpredictably
+    mask_done_no_date = (df["Status"].astype(str).str.lower().str.contains("done")) & (
+        df["Completed"].isna()
+    )
+    df.loc[mask_done_no_date, "Completed"] = df.loc[mask_done_no_date, "Updated Time"]
+
     df["Parent NID"] = (
         pd.to_numeric(df["Parent NID"], errors="coerce").fillna(0).astype(int)
     )
+
+    # Ensure Tag columns exist
+    if "Tags" not in df.columns:
+        df["Tags"] = "[]"
+    if "Parent Tags" not in df.columns:
+        df["Parent Tags"] = "[]"
+
+    # Apply Tag Filtering
+    if FILTER_TAGS:
+
+        def parse_tags(x):
+            try:
+                return ast.literal_eval(x) if isinstance(x, str) else []
+            except Exception:
+                return []
+
+        def match_tags(row):
+            t = parse_tags(row["Tags"])
+            pt = parse_tags(row["Parent Tags"])
+            return not set(t + pt).isdisjoint(FILTER_TAGS)
+
+        df = df[df.apply(match_tags, axis=1)]
 
     status_map = {
         "Duplicate": "duplicate",
@@ -213,14 +257,80 @@ def generate_report_charts(goals, completed, in_progress):
         return False
 
 
+def get_smart_attachment_content(nid, files_str):
+    """
+    Parses the file list, checks extensions, and returns formatted content.
+    Skips Excel/CSV and binary files.
+    """
+    if not INCLUDE_ATTACHMENTS or not files_str:
+        return ""
+
+    try:
+        files = ast.literal_eval(files_str) if isinstance(files_str, str) else files_str
+        if not isinstance(files, list) or not files:
+            return ""
+    except (ValueError, SyntaxError):
+        return ""
+
+    attachment_text = ""
+    folder_path = os.path.join(PAGES_ATTACHMENT_DIR, str(nid))
+
+    if not os.path.exists(folder_path):
+        return ""
+
+    for filename in files:
+        _, ext = os.path.splitext(filename)
+        ext = ext.lower()
+        file_path = os.path.join(folder_path, filename)
+
+        # Case 1: Human readable text (fetch content)
+        if ext in READABLE_EXTENSIONS:
+            try:
+                if os.path.exists(file_path):
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read(
+                            1000
+                        )  # Limit to 1000 chars to prevent massive overflow
+                        if len(content) == 1000:
+                            content += "... [Truncated]"
+                        attachment_text += (
+                            f"\n\n--- Attachment: {filename} ---\n{content}\n"
+                        )
+            except Exception:
+                continue  # Skip if read error
+
+        # Case 2: Skip Excel/CSV (they ruin formatting)
+        elif ext in [".csv", ".xlsx", ".xls"]:
+            continue
+
+        # Case 3: Other files (just show name if desired, or skip binaries if strictly text)
+        # We skip adding just a link/name to keep the report "clean" for non-text items.
+
+    return attachment_text
+
+
 def generate_pdf_report(period="weekly", report_start_date=None, report_end_date=None):
     df = get_tasks_df()
     if df.empty:
         return
 
-    # --- 1. Build Parent Lookup Map ---
+    # 1. Build Parent Lookup Map
     # Create a dictionary {NID: Name} to look up parent names instantly
     nid_to_name = df.set_index("NID")["Name"].to_dict()
+
+    # Build a "Is Parent" lookup to identify container tasks
+    # We parse "Children NIDs" to see if a task has children
+    def has_children(x):
+        try:
+            val = ast.literal_eval(x) if isinstance(x, str) else x
+            return isinstance(val, list) and len(val) > 0
+        except Exception:
+            return False
+
+    # Create a set of NIDs that are parents
+    parent_nids_set = set(
+        df[df["Children NIDs"].apply(has_children)]["NID"].astype(int)
+    )
 
     # Determine reference date
     today = None
@@ -282,18 +392,29 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
 
     # --- Filter Logic ---
     # Goals (Date > Priority)
+    # We strictly respect the Start/End date even for To Do items if they have a Due Date
     candidates = df[
         (df["Status"] == "to do") & (df["Priority"].isin(["Critical", "High"]))
     ]
-    dated_goals = candidates[candidates["Due"].notna()].sort_values("Due")
-    undated_goals = candidates[candidates["Due"].isna()]
-    goals = dated_goals if not dated_goals.empty else undated_goals
 
+    # Split into dated and undated
+    dated_candidates = candidates[candidates["Due"].notna()]
+    undated_goals = candidates[candidates["Due"].isna()]
+
+    # Only include dated goals if they fall within or before the report period
+    # This prevents tasks due next year from cluttering this week's report
+    dated_goals = dated_candidates[dated_candidates["Due"] <= today]
+
+    goals = pd.concat([dated_goals, undated_goals]).sort_values("Due")
+
+    # Completed Logic: Now relies on the improved 'Completed' column (which falls back to Updated)
     completed = df[
         (df["Status"] == "done")
         & (df["Completed"] >= start_date)
         & (df["Completed"] <= today)
     ]
+
+    # In Progress Logic
     in_progress = df[df["Status"] == "doing"]
     # Catch-all for tasks that don't fit the specific template statuses (e.g. if Status column is missing)
     uncategorized = df[
@@ -301,6 +422,38 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
             ["to do", "doing", "done", "canceled", "duplicate", "notes", "paused"]
         )
     ]
+
+    # Helper to clean up lists
+    def clean_task_list(task_df):
+        """
+        Removes tasks that are 'Parents' (containers) IF:
+        1. They have no body content (or body is disabled).
+        2. They are likely just headers for other tasks in the list.
+        """
+        if task_df.empty:
+            return task_df
+
+        # Helper to check if body is effectively empty
+        def is_body_empty(row):
+            if not INCLUDE_BODY_CONTENT:
+                return True
+            content = str(row.get("Body Content", "")).strip()
+            return not content or content == "nan"
+
+        # Filter out rows where NID is a Parent AND Body is Empty
+        # This stops the "b. Writing paper: ..." standalone header from appearing
+        # when its children are also listed.
+        mask = ~(
+            (task_df["NID"].isin(parent_nids_set))
+            & (task_df.apply(is_body_empty, axis=1))
+        )
+        return task_df[mask]
+
+    # Apply the cleanup
+    goals = clean_task_list(goals)
+    completed = clean_task_list(completed)
+    in_progress = clean_task_list(in_progress)
+
     # --- Generate PDF ---
     os.makedirs(REPORTS_DIR, exist_ok=True)
     output_path = os.path.join(REPORTS_DIR, filename)
@@ -314,10 +467,18 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
     pdf.chapter_title(1, "To Do")
     if not goals.empty:
         for i, (_, row) in enumerate(goals.iterrows()):
-            # Resolve Parent Name
             parent_nid = row["Parent NID"]
             p_name = nid_to_name.get(parent_nid) if parent_nid else None
-            pdf.add_task_item(i, row["Name"], parent_name=p_name)
+
+            # Prepare Body
+            body = row.get("Body Content", "") if INCLUDE_BODY_CONTENT else ""
+            # Append Attachment Content
+            att_content = get_smart_attachment_content(
+                row["NID"], row.get("Files & Media")
+            )
+            full_body = (str(body) + str(att_content)).strip()
+
+            pdf.add_task_item(i, row["Name"], full_body, parent_name=p_name)
     else:
         pdf.chapter_body("No immediate high priority goals with due dates.")
 
@@ -327,9 +488,14 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
         for i, (_, row) in enumerate(completed.iterrows()):
             parent_nid = row["Parent NID"]
             p_name = nid_to_name.get(parent_nid) if parent_nid else None
-            pdf.add_task_item(
-                i, row["Name"], row.get("Body Content", ""), parent_name=p_name
+
+            body = row.get("Body Content", "") if INCLUDE_BODY_CONTENT else ""
+            att_content = get_smart_attachment_content(
+                row["NID"], row.get("Files & Media")
             )
+            full_body = (str(body) + str(att_content)).strip()
+
+            pdf.add_task_item(i, row["Name"], full_body, parent_name=p_name)
     else:
         pdf.chapter_body("No tasks completed in this period.")
 
@@ -339,13 +505,20 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
         for i, (_, row) in enumerate(in_progress.iterrows()):
             parent_nid = row["Parent NID"]
             p_name = nid_to_name.get(parent_nid) if parent_nid else None
-            pdf.add_task_item(i, row["Name"], parent_name=p_name)
+
+            body = row.get("Body Content", "") if INCLUDE_BODY_CONTENT else ""
+            att_content = get_smart_attachment_content(
+                row["NID"], row.get("Files & Media")
+            )
+            full_body = (str(body) + str(att_content)).strip()
+
+            pdf.add_task_item(i, row["Name"], full_body, parent_name=p_name)
     else:
         pdf.chapter_body("No tasks currently in progress.")
 
     # Section 4: Uncategorized / Backlog (The "Worst Case" Handler)
     # If the user's database doesn't have a "Status" property, everything ends up here.
-    if not uncategorized.empty:
+    if INCLUDE_UNCATEGORIZED and not uncategorized.empty:
         pdf.chapter_title(4, "Uncategorized / Other Tasks")
         pdf.chapter_body(
             "These tasks do not match standard status filters (To Do, Doing, Done)."
