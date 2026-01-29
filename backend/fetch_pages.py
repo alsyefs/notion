@@ -22,8 +22,7 @@ from backend.globals import (
     NOTION_PROPERTY_FILES_MEDIA,
     NOTION_PROPERTY_PARENT_ITEM,
     NOTION_PROPERTY_SUB_ITEM,
-    NOTION_PROPERTY_TAGS,
-    NOTION_PROPERTY_PARENT_TAGS,
+    NOTION_PROPERTY_ACTIVE_TAGS,
 )
 
 headers = {
@@ -310,6 +309,7 @@ def safe_get(dct, *keys):
     for key in keys:
         if isinstance(current, dict):
             current = current.get(key)
+        # Handle Notion Formula property structure (arrays/strings)
         elif isinstance(current, list) and isinstance(key, int) and len(current) > key:
             current = current[key]
         else:
@@ -376,24 +376,33 @@ async def process_page(result, session):
     ]
     children_nids = [await fetch_page_nid(uid, session) for uid in children_uids]
 
-    tags_list = safe_get(properties, NOTION_PROPERTY_TAGS, "multi_select") or []
-    tags = [tag["name"] for tag in tags_list] if tags_list else []
+    # Fetch Active Tags (Formula)
+    # Formulas can return string, number, boolean, or date.
+    # Lists in formulas (like .concat()) often return as a list of objects or string depending on API version.
+    active_tags_prop = properties.get(NOTION_PROPERTY_ACTIVE_TAGS, {})
+    active_tags = []
 
-    # Fetch Parent Tags (Rollup or Multi-select)
-    # Handle Rollup (array) or direct property
-    p_tags_prop = properties.get(NOTION_PROPERTY_PARENT_TAGS, {})
-    parent_tags = []
-    if p_tags_prop.get("type") == "rollup":
-        # Rollups can be arrays of multi_select arrays
-        rollup_array = p_tags_prop.get("rollup", {}).get("array", [])
-        for item in rollup_array:
-            if item.get("type") == "multi_select":
-                parent_tags.extend([t["name"] for t in item.get("multi_select", [])])
-    elif p_tags_prop.get("type") == "multi_select":
-        parent_tags = [t["name"] for t in p_tags_prop.get("multi_select", [])]
+    if active_tags_prop.get("type") == "formula":
+        formula_content = active_tags_prop.get("formula", {})
+        f_type = formula_content.get("type")
 
-    # Remove duplicates from parent tags
-    parent_tags = list(set(parent_tags))
+        if f_type == "string":
+            # If the formula returns a comma-separated string
+            val = formula_content.get("string")
+            if val:
+                active_tags = [t.strip() for t in val.split(",")]
+        elif f_type == "multi_select":
+            # Sometimes formulas returning lists appear as multi_select in value
+            active_tags = [t["name"] for t in formula_content.get("multi_select", [])]
+        elif f_type == "array":
+            # Handle array of values (common for relation rollups/concats)
+            for item in formula_content.get("array", []):
+                if item.get("type") == "string":
+                    active_tags.append(item.get("string"))
+                elif item.get("type") == "multi_select":
+                    active_tags.extend(
+                        [t["name"] for t in item.get("multi_select", [])]
+                    )
 
     comments = await fetch_comments(page_id, session)
     comment_texts = [
@@ -422,8 +431,7 @@ async def process_page(result, session):
         "Parent NID": parent_nid,
         "Children UIDs": children_uids,
         "Children NIDs": children_nids,
-        "Tags": tags,
-        "Parent Tags": parent_tags,
+        "Active Tags": active_tags,
         "Comments": comments_str,
     }
 
@@ -477,8 +485,10 @@ def check_schema_health(first_task_properties):
         ("Started", NOTION_PROPERTY_STARTED),
         ("Completed", NOTION_PROPERTY_COMPLETED),
         ("Files", NOTION_PROPERTY_FILES_MEDIA),
-        ("Tags", NOTION_PROPERTY_TAGS),
-        ("Parent Tags", NOTION_PROPERTY_PARENT_TAGS),
+        ("Active Tags", NOTION_PROPERTY_ACTIVE_TAGS),
+        # ("NID", NOTION_PROPERTY_NID),
+        # ("Parent Item", NOTION_PROPERTY_PARENT_ITEM),
+        # ("Sub-item", NOTION_PROPERTY_SUB_ITEM),
     ]
 
     missing_count = 0

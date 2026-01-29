@@ -1,6 +1,6 @@
 # Notion Database Integration and Automation
 ![MIT License](https://img.shields.io/badge/license-MIT-blue)
-![Python 3.6+](https://img.shields.io/badge/python-3.6%2B-brightgreen)
+![Python 3.11.6](https://img.shields.io/badge/python-3.11.6-brightgreen)
 
 The main goal of this project is to analyze your work on Notion to provide useful insights for better productivity. It fetches data from your Notion database, including pages, content, comments, and attachments. It generates detailed text analysis and **PDF reports** with charts to help you visualize your tasks and workflow.
 
@@ -138,9 +138,9 @@ The code assumes your Notion database contains the following properties (columns
 1. **NID**: Type `Number` (Unique numeric ID, often used for tickets).
 2. **Name**: Type `Title`.
 3. **Status**: Type `Select`.
-   - **Mapped Options**: '6 Done 🙌', '5 Paused', '4 Doing', '3 To Do', '2 Notes', '1 Canceled', 'Duplicate'.
+   - **Mapped Options**: 'Done', 'Doing', 'To Do', 'Paused', 'Notes', 'Duplicate', 'Canceled'.
 4. **Priority**: Type `Select`.
-   - Options: 'Critical', 'High', 'Medium', 'Low', 'Note'.
+   - Options: 'Critical (48hrs)', 'High (1wk)', 'Medium (2wks)', 'Low (>month)', 'Note'.
 5. **Started**: Type `Date`.
 6. **Completed**: Type `Date`.
 7. **Due**: Type `Date`.
@@ -149,6 +149,7 @@ The code assumes your Notion database contains the following properties (columns
 10. **Sub-item**: Type `Relation` (Used to identify "Project" containers vs. actionable tasks).
 11. **Update Time**: Type `Last edited time`.
 12. **Created**: Type `Created time`.
+13. **Active Tags**: Type `Formula` with this formula inside it `prop("Tags").concat(prop("Parent Tags")).unique()`
 
 **Body Content**: This is not part of the database, but it represents the content of a page in the database.
 

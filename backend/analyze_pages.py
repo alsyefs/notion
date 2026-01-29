@@ -52,8 +52,7 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
         "Children NIDs",
         "NID",
         "Name",
-        "Tags",
-        "Parent Tags",
+        "Active Tags",
     ]
     for col in expected_columns:
         if col not in tasks_df.columns:
@@ -70,20 +69,18 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
         except Exception:
             return []
 
-    if "Tags" not in tasks_df.columns:
-        tasks_df["Tags"] = None
-    if "Parent Tags" not in tasks_df.columns:
-        tasks_df["Parent Tags"] = None
+    if "Active Tags" not in tasks_df.columns:
+        tasks_df["Active Tags"] = None
 
     # Apply Tag Filtering
     if FILTER_TAGS:
-        # Check if any of the FILTER_TAGS exist in 'Tags' or 'Parent Tags'
+        # Check if any of the FILTER_TAGS exist in 'Active Tags'
         def match_tags(row):
-            row_tags = parse_list_col(row["Tags"])
-            parent_tags = parse_list_col(row["Parent Tags"])
-            all_tags = set(row_tags + parent_tags)
-            # Returns True if intersection is not empty
-            return not all_tags.isdisjoint(FILTER_TAGS)
+            # Simplify: Only check the Active Tags column
+            active = parse_list_col(row["Active Tags"])
+            if active:
+                return not set(active).isdisjoint(FILTER_TAGS)
+            return False
 
         original_count = len(tasks_df)
         tasks_df = tasks_df[tasks_df.apply(match_tags, axis=1)].copy()
@@ -136,18 +133,24 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
 
     # Normalize Status
     status_mapping = {
+        "Canceled": "canceled",
         "Duplicate": "duplicate",
-        "1 Canceled": "canceled",
-        "2 Notes": "notes",
-        "3 To Do": "to do",
-        "4 Doing": "doing",
-        "5 Paused": "paused",
-        "6 Done 🙌": "done",
+        "Notes": "notes",
+        "Paused": "paused",
+        "To Do": "to do",
+        "Doing": "doing",
+        "Done": "done",
     }
     tasks_df["Status"] = tasks_df["Status"].replace(status_mapping)
 
     # Normalize Priority for sorting
-    priority_map = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3, "Note": 4}
+    priority_map = {
+        "Critical (48hrs)": 0,
+        "High (1wk)": 1,
+        "Medium (2wks)": 2,
+        "Low (>month)": 3,
+        "Note": 4,
+    }
     tasks_df["Priority_Score"] = tasks_df["Priority"].map(priority_map).fillna(5)
 
     # Identify "Container/Project" tasks vs "Actionable" tasks
@@ -354,7 +357,7 @@ def analyze_task_dates(tasks_df: pd.DataFrame):
 
 def analyze_task_priorities(tasks_df: pd.DataFrame):
     critical_high = tasks_df[
-        (tasks_df["Priority"].isin(["Critical", "High"]))
+        (tasks_df["Priority_Score"] <= 1)  # Critical=0, High=1
         & (tasks_df["Status"].str.lower().isin(["to do", "doing"]))
         & (tasks_df["Is_Project"] == False)
     ]
