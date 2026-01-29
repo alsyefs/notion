@@ -32,62 +32,39 @@ class PDFReport(FPDF):
         self.report_end_date_str = report_end_date_str
 
     def header(self):
-        self.set_font("Arial", "B", 14)
-        self.cell(0, 10, self.title_text, 0, 1, "C")
+        # Watermark: simple light gray text to avoid rotation errors
+        self.set_font("Arial", "B", 40)
+        self.set_text_color(245, 245, 245)
+        self.text(40, 150, "STATUS REPORT - CONFIDENTIAL")
+        self.set_text_color(0, 0, 0)
 
-        # Add Period Range
-        self.set_font("Arial", "", 10)
-        self.cell(
-            0,
-            6,
-            f"Period: {self.start_date_str} to {self.report_end_date_str}",
-            0,
-            1,
-            "C",
-        )
+    # This is the missing method causing your error
+    def add_group_header(self, group_name):
+        self.set_font("Arial", "B", 10)
+        self.set_text_color(100, 100, 100)
+        self.ln(2)
+        self.cell(0, 6, str(group_name).upper(), 0, 1, "L")
+        self.set_text_color(0, 0, 0)
+        self.ln(1)
 
-        self.set_font("Arial", "I", 10)
-        self.cell(
-            0,
-            6,
-            f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d')}",
-            0,
-            1,
-            "C",
-        )
-        # Print the user name if available
-        if NAME_TO_BE_PRINTED:
-            self.cell(0, 6, f"Prepared by: {NAME_TO_BE_PRINTED}", 0, 1, "C")
-        self.ln(5)
+    def rotated_text(self, x, y, txt, angle):
+        # Helper for watermark rotation
+        with self.rotation(angle, x, y):
+            self.text(x, y, txt)
 
     def footer(self):
         self.set_y(-15)
         self.set_font("Arial", "I", 8)
+        self.set_text_color(128, 128, 128)
         self.cell(0, 10, f"Page {self.page_no()}", 0, 0, "C")
 
     def chapter_title(self, num, label):
-        self.set_font("Arial", "B", 12)
-        self.set_fill_color(230, 230, 230)
-        self.cell(0, 10, f"{num}. {label}", 0, 1, "L", 1)
-        self.ln(2)
-
-    def chapter_body(self, body):
-        self.set_font("Arial", "", 10)
-        self.multi_cell(0, 6, body)
-        self.ln()
-
-    def add_group_header(self, group_name):
-        self.ln(2)
-        self.set_font("Arial", "B", 10)
-        self.set_text_color(80, 80, 80)  # Dark Gray for distinction
-        # Clean the text to prevent encoding errors
-        clean_group = safe_encode(TextHelper.clean_text(group_name))
-        self.cell(0, 6, f"{clean_group}", 0, 1, "L")
-        self.set_text_color(0, 0, 0)  # Reset to Black
+        self.set_font("Arial", "B", 11)
+        self.set_fill_color(245, 245, 245)
+        self.cell(0, 8, f"{num}. {label}", 0, 1, "L", 1)
+        self.ln(1)
 
     def add_task_item(self, index, task_name, task_body=None, parent_name=None):
-        # Construct the display name with parent context if available
-        # Format: "Parent Name: Task Name"
         if parent_name:
             full_display_name = f"[{parent_name}]: {task_name}"
         else:
@@ -95,20 +72,19 @@ class PDFReport(FPDF):
 
         clean_name = safe_encode(TextHelper.clean_text(full_display_name))
 
-        self.set_font("Arial", "B", 10)
-        self.multi_cell(0, 6, f"{chr(97 + index)}. {clean_name}")
+        self.set_font("Arial", "B", 9)
+        self.multi_cell(0, 5, f"{chr(97 + index)}. {clean_name}")
 
         if task_body and isinstance(task_body, str) and task_body.strip():
-            self.set_font("Arial", "", 10)
-            # Truncate page body text content
+            self.set_font("Arial", "", 9)
             if BODY_CONTENT_MAX_LINES > 0:
                 lines = task_body.split("\n")
                 if len(lines) > BODY_CONTENT_MAX_LINES:
                     lines = lines[:BODY_CONTENT_MAX_LINES]
-                    lines.append(f"... (Truncated to {BODY_CONTENT_MAX_LINES} lines)")
+                    lines.append(f"... (Truncated)")
                     task_body = "\n".join(lines)
             self.render_markdown(task_body)
-            self.ln(2)
+            self.ln(1)
 
     def render_markdown(self, text):
         lines = text.split("\n")
@@ -116,32 +92,18 @@ class PDFReport(FPDF):
             line = line.strip()
             if not line:
                 continue
-            current_indent = 20
+            current_indent = 15
             if re.match(r"^(\d+\.|-|\*)\s", line):
-                current_indent = 25
+                current_indent = 20
             self.set_x(current_indent)
             parts = line.split("**")
             for i, part in enumerate(parts):
                 clean_part = safe_encode(TextHelper.clean_text(part))
                 if not clean_part:
                     continue
-                if i % 2 == 1:
-                    self.set_font("Arial", "B", 10)
-                else:
-                    self.set_font("Arial", "", 10)
-                self.write(5, clean_part)
-            self.set_font("Arial", "", 10)
-            self.ln(5)
-
-    def add_chart_section(self, title, image_path):
-        """Adds a new page/section for a chart."""
-        if os.path.exists(image_path):
-            self.add_page()
-            self.chapter_title("Analysis", title)
-            # Image(name, x, y, w, h)
-            # Adjust width to fit page (A4 width is ~210mm)
-            self.image(image_path, x=10, w=190)
-            self.ln()
+                self.set_font("Arial", "B" if i % 2 == 1 else "", 9)
+                self.write(4, clean_part)
+            self.ln(4)
 
 
 def safe_encode(text):
@@ -331,6 +293,12 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
     if df.empty:
         return
 
+    # Determine tag prefix for filename
+    tag_suffix = ""
+    if FILTER_TAGS and len(FILTER_TAGS) > 0:
+        # Use the first tag name from the list as a prefix
+        tag_suffix = f"{FILTER_TAGS[0]}_"
+
     # 1. Build Parent Lookup Map
     nid_to_name = df.set_index("NID")["Name"].to_dict()
 
@@ -381,23 +349,23 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
         start_date = today - datetime.timedelta(days=1)
         title = f"Daily Status Report - {today.strftime('%Y-%m-%d')}"
         filename = f"daily_{today.strftime('%Y-%m-%d')}.pdf"
+        filename = f"daily_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
     elif period == "weekly":
         start_date = today - datetime.timedelta(days=7)
         title = f"Weekly Status Report - Week {today.isocalendar()[1]}"
-        filename = f"weekly_{today.strftime('%Y-%m-%d')}.pdf"
+        filename = f"weekly_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
     elif period == "biweekly":
         start_date = today - datetime.timedelta(days=14)
         title = f"Biweekly Status Report - Weeks {today.isocalendar()[1]-1} & {today.isocalendar()[1]}"
-        filename = f"biweekly_{today.strftime('%Y-%m-%d')}.pdf"
+        filename = f"biweekly_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
     elif period == "monthly":
         start_date = today - datetime.timedelta(days=30)
         title = f"Monthly Status Report - {today.strftime('%B %Y')}"
-        filename = f"monthly_{today.strftime('%Y-%m-%d')}.pdf"
+        filename = f"monthly_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
     elif period == "yearly":
         start_date = today - datetime.timedelta(days=365)
         title = f"Yearly Status Report - {today.year}"
-        filename = f"yearly_{today.strftime('%Y-%m-%d')}.pdf"
-
+        filename = f"yearly_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
     # Format dates for header
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = today.strftime("%Y-%m-%d")
@@ -525,6 +493,19 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
     pdf.alias_nb_pages()
     pdf.add_page()
 
+    # Add the header only once on the first page
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, title, 0, 1, "C")
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 6, f"Period: {start_str} to {end_str}", 0, 1, "C")
+    pdf.set_font("Arial", "I", 9)
+    pdf.cell(
+        0, 5, f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d')}", 0, 1, "C"
+    )
+    if NAME_TO_BE_PRINTED:
+        pdf.cell(0, 5, f"Prepared by: {NAME_TO_BE_PRINTED}", 0, 1, "C")
+    pdf.ln(5)
+
     # Helper function to print grouped list
     def print_grouped_section(pdf_obj, data_df):
         current_group = None
@@ -577,16 +558,26 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
         for i, (_, row) in enumerate(uncategorized.iterrows()):
             pdf.add_task_item(i, row["Name"])
 
-    # --- Add Charts ---
-    # 1. Report Specific Status Chart (Generated on the fly)
-    if generate_report_charts(goals, completed, in_progress):
-        pdf.add_chart_section(
-            "Work Distribution (This Period)", REPORT_STATUS_CHART_PATH
-        )
+    # Combined Analysis Section (Charts on the same page)
+    chart_1_exists = generate_report_charts(goals, completed, in_progress)
+    chart_2_exists = os.path.exists(TASKS_OVER_TIME_PLOT_PATH)
 
-    # 2. Velocity Chart (Global Trend)
-    if os.path.exists(TASKS_OVER_TIME_PLOT_PATH):
-        pdf.add_chart_section("Tasks Over time", TASKS_OVER_TIME_PLOT_PATH)
+    if chart_1_exists or chart_2_exists:
+        pdf.add_page()
+        pdf.chapter_title("Analysis", "Work Distribution & Productivity Trends")
+
+        # Place charts vertically on the same page
+        current_y = pdf.get_y()
+        if chart_1_exists:
+            pdf.image(REPORT_STATUS_CHART_PATH, x=10, y=current_y, w=90)  # Half width
+
+        if chart_2_exists:
+            # If both exist, put them side by side or stacked.
+            # Stacking is safer for readability:
+            if chart_1_exists:
+                pdf.image(TASKS_OVER_TIME_PLOT_PATH, x=10, y=current_y + 85, w=190)
+            else:
+                pdf.image(TASKS_OVER_TIME_PLOT_PATH, x=10, y=current_y, w=190)
 
     pdf.output(output_path, "F")
     PrintStyle.print_saved("Report", output_path)

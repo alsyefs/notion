@@ -19,6 +19,9 @@ from backend.globals import (
     TASKS_REPLATIONSHIPS_PLOT_PATH,
     INCLUDE_UNCATEGORIZED,
     FILTER_TAGS,
+    NOTION_PROPERTY_STATUS,
+    NOTION_PROPERTY_PRIORITY,
+    NOTION_PROPERTY_DUE,
 )
 
 # Visualization settings
@@ -38,8 +41,24 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
 
     # Clean column names by stripping whitespace (fixes "Status " vs "Status")
     tasks_df.columns = tasks_df.columns.str.strip()
-    # DEBUG: Print columns to verify what Pandas actually sees (Remove this later if you want)
+    # Print columns to verify what Pandas actually sees (Remove this later if you want)
     PrintStyle.print_info(f"Loaded CSV Columns: {list(tasks_df.columns)}")
+
+    status_ok = (
+        tasks_df[NOTION_PROPERTY_STATUS].notna().any()
+        if NOTION_PROPERTY_STATUS in tasks_df.columns
+        else False
+    )
+    priority_ok = (
+        tasks_df[NOTION_PROPERTY_PRIORITY].notna().any()
+        if NOTION_PROPERTY_PRIORITY in tasks_df.columns
+        else False
+    )
+    due_ok = (
+        tasks_df[NOTION_PROPERTY_DUE].notna().any()
+        if NOTION_PROPERTY_DUE in tasks_df.columns
+        else False
+    )
 
     # Ensure critical columns exist even if the CSV didn't have them
     expected_columns = [
@@ -141,7 +160,14 @@ def analyze_tasks(csv_file=PAGES_CSV_FILE_PATH, output_file=ANALYSIS_OUTPUT_FILE
         "Doing": "doing",
         "Done": "done",
     }
-    tasks_df["Status"] = tasks_df["Status"].replace(status_mapping)
+    if NOTION_PROPERTY_STATUS in tasks_df.columns:
+        tasks_df[NOTION_PROPERTY_STATUS] = tasks_df[NOTION_PROPERTY_STATUS].replace(
+            status_mapping
+        )
+    if NOTION_PROPERTY_STATUS in tasks_df.columns:
+        tasks_df[NOTION_PROPERTY_STATUS] = tasks_df[NOTION_PROPERTY_STATUS].replace(
+            status_mapping
+        )
 
     # Normalize Priority for sorting
     priority_map = {
@@ -212,12 +238,14 @@ def analyze_uncategorized(df: pd.DataFrame):
     ]
 
     # Check if 'Status' column even has meaningful data or if it's all "unknown"
-    uncategorized = df[~df["Status"].str.lower().isin(known_statuses)].copy()
+    uncategorized = df[
+        ~df[NOTION_PROPERTY_STATUS].str.lower().isin(known_statuses)
+    ].copy()
 
     if not uncategorized.empty:
         print("These items have a Status that is not recognized (or missing):")
         # Print a simple table of these items
-        cols = ["NID", "Name", "Status", "Created"]
+        cols = ["NID", "Name", NOTION_PROPERTY_STATUS, "Created"]
 
         # Format for display
         display = uncategorized[cols].copy()
@@ -246,7 +274,7 @@ def print_task_table(df):
     display_df["Name"] = display_df["Name"].apply(TextHelper.truncate_text)
     display_df["Due"] = display_df["Due"].fillna("None")
 
-    cols = ["NID", "Name", "Status", "Priority", "Due"]
+    cols = ["NID", "Name", NOTION_PROPERTY_STATUS, "Priority", "Due"]
     print(display_df[cols].to_string(index=False))
 
 
@@ -260,7 +288,7 @@ def analyze_weekly_focus(df: pd.DataFrame):
 
     # Base filter: Active items (To Do or Doing) AND NOT Projects
     active_items = df[
-        (df["Status"].str.lower().isin(["to do", "doing"]))
+        (df[NOTION_PROPERTY_STATUS].str.lower().isin(["to do", "doing"]))
         & (df["Is_Project"] == False)
     ].copy()
 
@@ -269,7 +297,7 @@ def analyze_weekly_focus(df: pd.DataFrame):
         (active_items["Due Date"].notna())
         & (
             (active_items["Due Date"] < today)
-            | (active_items["Status"].str.lower() == "doing")
+            | (active_items[NOTION_PROPERTY_STATUS].str.lower() == "doing")
         )
     ].sort_values(by=["Priority_Score", "Due Date"])
 
@@ -316,7 +344,8 @@ def analyze_weekly_focus(df: pd.DataFrame):
 def analyze_active_projects(df: pd.DataFrame):
     """Shows status of 'Container' tasks (like PhD Thesis)."""
     projects = df[
-        (df["Is_Project"] == True) & (df["Status"].str.lower().isin(["to do", "doing"]))
+        (df["Is_Project"] == True)
+        & (df[NOTION_PROPERTY_STATUS].str.lower().isin(["to do", "doing"]))
     ].sort_values(by="Priority_Score")
 
     if not projects.empty:
@@ -329,12 +358,20 @@ def analyze_active_projects(df: pd.DataFrame):
 def analyze_task_summary(tasks_df: pd.DataFrame):
     total_tasks = len(tasks_df)
     completed = len(
-        tasks_df[tasks_df["Status"].str.contains("done", case=False, na=False)]
+        tasks_df[
+            tasks_df[NOTION_PROPERTY_STATUS].str.contains("done", case=False, na=False)
+        ]
     )
     doing = len(
-        tasks_df[tasks_df["Status"].str.contains("doing", case=False, na=False)]
+        tasks_df[
+            tasks_df[NOTION_PROPERTY_STATUS].str.contains("doing", case=False, na=False)
+        ]
     )
-    todo = len(tasks_df[tasks_df["Status"].str.contains("to do", case=False, na=False)])
+    todo = len(
+        tasks_df[
+            tasks_df[NOTION_PROPERTY_STATUS].str.contains("to do", case=False, na=False)
+        ]
+    )
 
     print(f"Total Database Items: {total_tasks}")
     print(f"├─ Completed: {completed}")
@@ -345,7 +382,7 @@ def analyze_task_summary(tasks_df: pd.DataFrame):
 def analyze_task_dates(tasks_df: pd.DataFrame):
     today = pd.Timestamp.now().tz_localize(None)
     incomplete = tasks_df[
-        (tasks_df["Status"].str.lower().isin(["to do", "doing"]))
+        (tasks_df[NOTION_PROPERTY_STATUS].str.lower().isin(["to do", "doing"]))
         & (tasks_df["Is_Project"] == False)
     ]
     overdue = incomplete[incomplete["Due Date"] < today]
@@ -358,7 +395,7 @@ def analyze_task_dates(tasks_df: pd.DataFrame):
 def analyze_task_priorities(tasks_df: pd.DataFrame):
     critical_high = tasks_df[
         (tasks_df["Priority_Score"] <= 1)  # Critical=0, High=1
-        & (tasks_df["Status"].str.lower().isin(["to do", "doing"]))
+        & (tasks_df[NOTION_PROPERTY_STATUS].str.lower().isin(["to do", "doing"]))
         & (tasks_df["Is_Project"] == False)
     ]
 
@@ -369,7 +406,7 @@ def analyze_task_priorities(tasks_df: pd.DataFrame):
 
 def analyze_upcoming_tasks(tasks_df: pd.DataFrame):
     pending_tasks = tasks_df[
-        (tasks_df["Status"].str.lower().isin(["to do", "doing"]))
+        (tasks_df[NOTION_PROPERTY_STATUS].str.lower().isin(["to do", "doing"]))
         & (tasks_df["Is_Project"] == False)
     ]
     oldest_pending = pending_tasks.nsmallest(5, "Created Date")
@@ -389,7 +426,8 @@ def generate_charts(tasks_df: pd.DataFrame):
 
         # --- Chart 1: Weekly Velocity (Tasks Completed per Week) ---
         completed_tasks = tasks_df[
-            (tasks_df["Status"].str.lower() == "done") & (tasks_df["Completed"].notna())
+            (tasks_df[NOTION_PROPERTY_STATUS].str.lower() == "done")
+            & (tasks_df["Completed"].notna())
         ].copy()
 
         if not completed_tasks.empty:
@@ -425,7 +463,7 @@ def generate_charts(tasks_df: pd.DataFrame):
             )
 
         # --- Chart 2: Status Distribution (Global) ---
-        status_counts = tasks_df["Status"].value_counts()
+        status_counts = tasks_df[NOTION_PROPERTY_STATUS].value_counts()
         if not status_counts.empty:
             plt.figure(figsize=(6, 6))
             plt.pie(
