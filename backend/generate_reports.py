@@ -46,12 +46,8 @@ class PDFReport(FPDF):
     def header(self):
         self.set_font("Arial", "B", 20)
         self.set_text_color(245, 245, 245)
-
         watermark_text = NAME_TO_BE_PRINTED or "STATUS REPORT"
-        # Apply rotation and tile the watermark across the page
         self.rotation(45, 105, 148)
-        # Tile the text using a grid pattern
-        # Spacing is adjusted for the smaller font size
         for x in range(-50, 300, 100):
             for y in range(-50, 400, 50):
                 self.text(x, y, watermark_text)
@@ -93,12 +89,9 @@ class PDFReport(FPDF):
             full_display_name = f"[{parent_name}]: {task_name}"
         else:
             full_display_name = task_name
-
         clean_name = safe_encode(TextHelper.clean_text(full_display_name))
-
         self.set_font("Arial", "B", 9)
-        self.multi_cell(0, 5, f"{chr(97 + index)}. {clean_name}")
-
+        self.multi_cell(0, 5, f"{index + 1}. {clean_name}")
         if task_body and isinstance(task_body, str) and task_body.strip():
             self.set_font("Arial", "", 9)
             if BODY_CONTENT_MAX_LINES > 0:
