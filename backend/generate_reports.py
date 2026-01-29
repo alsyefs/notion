@@ -44,22 +44,17 @@ class PDFReport(FPDF):
         )
 
     def header(self):
-        # Watermark: simple light gray text to avoid rotation errors
-        self.set_font("Arial", "B", 40)
-        self.set_text_color(240, 240, 240)
-        # Parameters for rotation: angle, x, y (center of rotation)
-        with self.rotation(45, 105, 148):
-            self.text(40, 150, NAME_TO_BE_PRINTED or "STATUS REPORT")
-        self.set_text_color(0, 0, 0)
+        self.set_font("Arial", "B", 20)
+        self.set_text_color(245, 245, 245)
 
-    def header(self):
-        # Set watermark color (light gray)
-        self.set_font("Arial", "B", 40)
-        self.set_text_color(240, 240, 240)
-        # Apply rotation manually
-        # We use _out('Q') later to restore the state
+        watermark_text = NAME_TO_BE_PRINTED or "STATUS REPORT"
+        # Apply rotation and tile the watermark across the page
         self.rotation(45, 105, 148)
-        self.text(40, 150, NAME_TO_BE_PRINTED or "STATUS REPORT")
+        # Tile the text using a grid pattern
+        # Spacing is adjusted for the smaller font size
+        for x in range(-50, 300, 100):
+            for y in range(-50, 400, 50):
+                self.text(x, y, watermark_text)
         self._out("Q")
         self.set_text_color(0, 0, 0)
 
