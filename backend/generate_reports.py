@@ -4,6 +4,7 @@ import os
 import datetime
 import re
 import ast
+import math
 import matplotlib.pyplot as plt
 import seaborn as sns
 from fpdf import FPDF
@@ -31,14 +32,37 @@ class PDFReport(FPDF):
         self.start_date_str = start_date_str
         self.report_end_date_str = report_end_date_str
 
+    # Method to handle rotation for versions without the built-in context manager
+    def rotation(self, angle, x, y):
+        angle = angle * 3.14159265359 / 180
+        c = math.cos(angle)
+        s = math.sin(angle)
+        cx = x * self.k
+        cy = (self.h - y) * self.k
+        self._out(
+            f"q {c:.5f} {s:.5f} {-s:.5f} {c:.5f} {cx:.5f} {cy:.5f} cm 1 0 0 1 {-cx:.5f} {-cy:.5f} cm"
+        )
+
     def header(self):
         # Watermark: simple light gray text to avoid rotation errors
         self.set_font("Arial", "B", 40)
-        self.set_text_color(245, 245, 245)
-        self.text(40, 150, "STATUS REPORT - CONFIDENTIAL")
+        self.set_text_color(240, 240, 240)
+        # Parameters for rotation: angle, x, y (center of rotation)
+        with self.rotation(45, 105, 148):
+            self.text(40, 150, NAME_TO_BE_PRINTED or "STATUS REPORT")
         self.set_text_color(0, 0, 0)
 
-    # This is the missing method causing your error
+    def header(self):
+        # Set watermark color (light gray)
+        self.set_font("Arial", "B", 40)
+        self.set_text_color(240, 240, 240)
+        # Apply rotation manually
+        # We use _out('Q') later to restore the state
+        self.rotation(45, 105, 148)
+        self.text(40, 150, NAME_TO_BE_PRINTED or "STATUS REPORT")
+        self._out("Q")
+        self.set_text_color(0, 0, 0)
+
     def add_group_header(self, group_name):
         self.set_font("Arial", "B", 10)
         self.set_text_color(100, 100, 100)
@@ -51,6 +75,11 @@ class PDFReport(FPDF):
         # Helper for watermark rotation
         with self.rotation(angle, x, y):
             self.text(x, y, txt)
+
+    def chapter_body(self, body):
+        self.set_font("Arial", "", 10)
+        self.multi_cell(0, 5, safe_encode(TextHelper.clean_text(body)))
+        self.ln(2)
 
     def footer(self):
         self.set_y(-15)
@@ -297,7 +326,7 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
     tag_suffix = ""
     if FILTER_TAGS and len(FILTER_TAGS) > 0:
         # Use the first tag name from the list as a prefix
-        tag_suffix = f"{FILTER_TAGS[0]}_"
+        tag_suffix = f"_{FILTER_TAGS[0]}"
 
     # 1. Build Parent Lookup Map
     nid_to_name = df.set_index("NID")["Name"].to_dict()
@@ -349,23 +378,23 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
         start_date = today - datetime.timedelta(days=1)
         title = f"Daily Status Report - {today.strftime('%Y-%m-%d')}"
         filename = f"daily_{today.strftime('%Y-%m-%d')}.pdf"
-        filename = f"daily_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
+        filename = f"daily_{today.strftime('%Y-%m-%d')}{tag_suffix}.pdf"
     elif period == "weekly":
         start_date = today - datetime.timedelta(days=7)
         title = f"Weekly Status Report - Week {today.isocalendar()[1]}"
-        filename = f"weekly_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
+        filename = f"weekly_{today.strftime('%Y-%m-%d')}{tag_suffix}.pdf"
     elif period == "biweekly":
         start_date = today - datetime.timedelta(days=14)
         title = f"Biweekly Status Report - Weeks {today.isocalendar()[1]-1} & {today.isocalendar()[1]}"
-        filename = f"biweekly_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
+        filename = f"biweekly_{today.strftime('%Y-%m-%d')}{tag_suffix}.pdf"
     elif period == "monthly":
         start_date = today - datetime.timedelta(days=30)
         title = f"Monthly Status Report - {today.strftime('%B %Y')}"
-        filename = f"monthly_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
+        filename = f"monthly_{today.strftime('%Y-%m-%d')}{tag_suffix}.pdf"
     elif period == "yearly":
         start_date = today - datetime.timedelta(days=365)
         title = f"Yearly Status Report - {today.year}"
-        filename = f"yearly_{today.strftime('%Y-%m-%d')}_{tag_suffix}.pdf"
+        filename = f"yearly_{today.strftime('%Y-%m-%d')}{tag_suffix}.pdf"
     # Format dates for header
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = today.strftime("%Y-%m-%d")
@@ -528,26 +557,26 @@ def generate_pdf_report(period="weekly", report_start_date=None, report_end_date
             # Add task item (Pass None for parent_name to avoid repeating the prefix)
             pdf_obj.add_task_item(i, row["Name"], full_body, parent_name=None)
 
-    # Section 1: Goals
-    pdf.chapter_title(1, "To Do")
-    if not goals.empty:
-        print_grouped_section(pdf, goals)
-    else:
-        pdf.chapter_body("No immediate high priority goals with due dates.")
-
-    # Section 2: Completed
-    pdf.chapter_title(2, "Completed Tasks")
+    # Section 1: Completed
+    pdf.chapter_title(1, "Completed Tasks")
     if not completed.empty:
         print_grouped_section(pdf, completed)
     else:
         pdf.chapter_body("No tasks completed in this period.")
 
-    # Section 3: In Progress
-    pdf.chapter_title(3, "In Progress")
+    # Section 2: In Progress
+    pdf.chapter_title(2, "In Progress")
     if not in_progress.empty:
         print_grouped_section(pdf, in_progress)
     else:
         pdf.chapter_body("No tasks currently in progress.")
+
+    # Section 3: Goals
+    pdf.chapter_title(3, "To Do")
+    if not goals.empty:
+        print_grouped_section(pdf, goals)
+    else:
+        pdf.chapter_body("No immediate high priority goals with due dates.")
 
     # Section 4: Uncategorized
     if INCLUDE_UNCATEGORIZED and not uncategorized.empty:

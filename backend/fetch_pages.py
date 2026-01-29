@@ -35,14 +35,19 @@ NOTION_PROPERTY_NAME = "Name"
 nid_cache = {}
 
 
-async def fetch_page_nid(
-    page_id, session
-):  # 'NID' is the numeric ID of a page. Different than 'ID' which is called 'UID' here.
-    """Fetch the NID of a page given its ID, using a cache to minimize API calls."""
+async def fetch_page_nid(page_id, session):
+    """Fetch the NID of a page given its ID, using a cache to minimize API calls.
+    NID' is the numeric ID of a page. Different than 'ID' which is called 'UID' here."""
     if not page_id:
         return None
     if page_id in nid_cache:
         return nid_cache[page_id]
+    # Check if the NID exists in the local CSV cache before calling the API
+    if "existing_tasks_df" in globals() and globals()["existing_tasks_df"] is not None:
+        if page_id in globals()["existing_tasks_df"].index:
+            cached_nid = globals()["existing_tasks_df"].at[page_id, "NID"]
+            nid_cache[page_id] = cached_nid
+            return cached_nid
     url = f"https://api.notion.com/v1/pages/{page_id}"
     async with session.get(url, headers=headers) as response:
         if response.status == 200:
@@ -539,6 +544,7 @@ async def fetch_and_process_pages(limit=None):
     print(
         f"{PrintStyle.CYAN}Fetching tasks from Notion (limit: {limit or 'no limit'})...{PrintStyle.RESET}"
     )
+    global existing_tasks_df
     existing_tasks_df = None
     cache_file = PAGES_CSV_FILE_PATH
     if os.path.exists(cache_file):  # Load existing data if available
